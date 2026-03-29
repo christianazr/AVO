@@ -67,67 +67,19 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[#eef3fb] text-[#0d1730]">
-      <div className="mx-auto flex min-h-screen max-w-7xl items-center px-6 py-10 md:px-8 lg:px-10">
-        <div className="grid w-full gap-8 xl:grid-cols-[1.2fr_0.9fr]">
-          <section className="rounded-[34px] border border-[#d8dfeb] bg-white p-8 shadow-sm md:p-10">
-            <div className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-[#2f66f5]">
-              Smart Grocery Planner
-            </div>
-
-            <h1 className="max-w-3xl text-5xl font-semibold leading-[0.95] tracking-tight text-[#0d1730] md:text-6xl">
-              Grocery planning with clarity and style.
-            </h1>
-
-            <p className="mt-6 max-w-2xl text-xl leading-8 text-[#667085]">
-              Organise your shopping list, manage stores, and keep every essential
-              beautifully structured in one premium experience.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-4">
-              <div className="rounded-2xl bg-[#0c1730] px-7 py-4 text-lg font-semibold text-white shadow-sm">
-                AVO Grocery List
-              </div>
-              <div className="rounded-2xl border border-[#d8dfeb] bg-white px-7 py-4 text-lg font-semibold text-[#0d1730]">
-                Premium Dashboard
-              </div>
-            </div>
-
-            <div className="mt-10 rounded-[28px] border border-[#dde3ee] bg-[#f8fbff] p-6">
-              <div className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-[#2f66f5]">
-                Why AVO
-              </div>
-
-              <div className="space-y-4">
-                <InfoRow
-                  icon={<ShoppingBag className="h-5 w-5" />}
-                  title="Organised shopping"
-                  text="Keep all your grocery items in one place, sorted by category and store."
-                />
-                <InfoRow
-                  icon={<Sparkles className="h-5 w-5" />}
-                  title="Premium experience"
-                  text="Enjoy a cleaner interface inspired by modern luxury productivity apps."
-                />
-                <InfoRow
-                  icon={<ArrowRight className="h-5 w-5" />}
-                  title="Synced everywhere"
-                  text="Your list is stored in Supabase so you can access it across devices."
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[34px] border border-[#d8dfeb] bg-white p-6 shadow-sm md:p-8">
-            <div className="rounded-[28px] bg-gradient-to-br from-[#081225] via-[#0d1a34] to-[#1d2d47] p-7 text-white">
-              <div className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-white/60">
+      <div className="mx-auto flex min-h-screen max-w-7xl items-center px-4 py-6 sm:px-6 sm:py-8 md:px-8 lg:px-10">
+        <div className="grid w-full gap-6 xl:grid-cols-[1.2fr_0.9fr] xl:gap-8">
+          <section className="order-1 rounded-[28px] border border-[#d8dfeb] bg-white p-5 shadow-sm sm:p-6 md:p-8 xl:order-2 xl:rounded-[34px]">
+            <div className="rounded-[24px] bg-gradient-to-br from-[#081225] via-[#0d1a34] to-[#1d2d47] p-5 text-white sm:rounded-[28px] sm:p-7">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60 sm:text-sm">
                 {isLogin ? "Welcome back" : "Create account"}
               </div>
 
-              <h2 className="text-4xl font-semibold tracking-tight">
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
                 {isLogin ? "Access your dashboard" : "Start with AVO"}
               </h2>
 
-              <p className="mt-4 text-lg leading-7 text-white/75">
+              <p className="mt-4 text-sm leading-7 text-white/75 sm:text-base md:text-lg">
                 {isLogin
                   ? "Sign in to manage your grocery list with the same premium experience across all devices."
                   : "Create your account and start organising your grocery shopping beautifully."}
@@ -221,6 +173,54 @@ export default function LoginPage() {
               </div>
             </div>
           </section>
+
+          <section className="order-2 rounded-[28px] border border-[#d8dfeb] bg-white p-5 shadow-sm sm:p-8 md:p-10 xl:order-1 xl:rounded-[34px]">
+            <div className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-[#2f66f5] sm:mb-5 sm:text-sm">
+              Smart Grocery Planner
+            </div>
+
+            <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-[#0d1730] sm:text-4xl md:text-5xl xl:text-6xl">
+              Grocery planning with clarity and style.
+            </h1>
+
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#667085] sm:mt-6 sm:text-lg md:text-xl md:leading-8">
+              Organise your shopping list, manage stores, and keep every essential
+              beautifully structured in one premium experience.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-4">
+              <div className="rounded-2xl bg-[#0c1730] px-5 py-3.5 text-center text-base font-semibold text-white shadow-sm sm:px-7 sm:py-4 sm:text-lg">
+                AVO Grocery List
+              </div>
+              <div className="rounded-2xl border border-[#d8dfeb] bg-white px-5 py-3.5 text-center text-base font-semibold text-[#0d1730] sm:px-7 sm:py-4 sm:text-lg">
+                Premium Dashboard
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[24px] border border-[#dde3ee] bg-[#f8fbff] p-5 sm:mt-10 sm:rounded-[28px] sm:p-6">
+              <div className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#2f66f5] sm:text-sm">
+                Why AVO
+              </div>
+
+              <div className="space-y-4">
+                <InfoRow
+                  icon={<ShoppingBag className="h-5 w-5" />}
+                  title="Organised shopping"
+                  text="Keep all your grocery items in one place, sorted by category and store."
+                />
+                <InfoRow
+                  icon={<Sparkles className="h-5 w-5" />}
+                  title="Premium experience"
+                  text="Enjoy a cleaner interface inspired by modern luxury productivity apps."
+                />
+                <InfoRow
+                  icon={<ArrowRight className="h-5 w-5" />}
+                  title="Synced everywhere"
+                  text="Your list is stored in Supabase so you can access it across devices."
+                />
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </main>
@@ -242,7 +242,7 @@ function InfoRow({
         {icon}
       </div>
       <div>
-        <h3 className="text-lg font-semibold text-[#0d1730]">{title}</h3>
+        <h3 className="text-base font-semibold text-[#0d1730] sm:text-lg">{title}</h3>
         <p className="mt-1 text-sm leading-6 text-[#667085]">{text}</p>
       </div>
     </div>
