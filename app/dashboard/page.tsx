@@ -1,340 +1,549 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
-
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
-  Apple,
-  Beef,
-  Milk,
-  ShoppingCart,
-  Coffee,
-  Fish,
-  Candy,
-  Sandwich,
-  Egg,
+  Search,
+  LogOut,
+  Plus,
   Star,
-} from 'lucide-react'
+  Trash2,
+  ShoppingBag,
+  CheckCircle2,
+  Clock3,
+  LayoutGrid,
+  Store,
+  Sparkles,
+  Minus,
+} from "lucide-react";
 
-type Item = {
-  id: string
-  name: string
-  user_id?: string
-  category?: string
-  supermarket?: string
-  quantity?: number
-  completed?: boolean
-  favorite?: boolean
-  created_at?: string
-}
+type Category =
+  | "Food"
+  | "Drinks"
+  | "Cleaning"
+  | "Frozen"
+  | "Household"
+  | "Other";
 
-export default function Dashboard() {
-  const router = useRouter()
+type StoreType =
+  | "Tesco"
+  | "Lidl"
+  | "Costco"
+  | "Aldi"
+  | "Sainsbury's"
+  | "Asda"
+  | "Other";
 
-  const [items, setItems] = useState<Item[]>([])
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState('food')
-  const [store, setStore] = useState('tesco')
-  const [quantity, setQuantity] = useState(1)
+type StatusFilter = "all" | "pending" | "done";
 
-  const [search, setSearch] = useState('')
-  const [filterStore, setFilterStore] = useState('all')
-  const [filterCategory, setFilterCategory] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('all')
+type GroceryItem = {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string;
+  store: string;
+  quantity: number;
+  completed: boolean;
+  favorite: boolean;
+  created_at: string;
+};
 
-  // 🔐 SESSION PROTECTION
+export default function DashboardPage() {
+  const router = useRouter();
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [items, setItems] = useState<GroceryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [newItem, setNewItem] = useState("");
+  const [category, setCategory] = useState<Category>("Food");
+  const [store, setStore] = useState<StoreType>("Tesco");
+  const [quantity, setQuantity] = useState(1);
+
+  const [search, setSearch] = useState("");
+  const [storeFilter, setStoreFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
   useEffect(() => {
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
+    const loadUserAndItems = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-      if (!data.session) {
-        router.push('/login')
-        return
+      if (userError || !user) {
+        router.push("/login");
+        return;
       }
 
-      fetchItems()
-    }
+      setUserId(user.id);
 
-    checkSession()
-  }, [router])
+      const { data, error } = await supabase
+        .from("grocery_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-  // FETCH ITEMS
-  const fetchItems = async () => {
-    const { data, error } = await supabase
-      .from('items')
-      .select('*')
-      .order('created_at', { ascending: false })
+      if (!error && data) {
+        setItems(data);
+      }
 
-    if (!error) setItems(data || [])
-  }
+      setLoading(false);
+    };
 
-  // ADD ITEM
-  const addItem = async () => {
-    if (!name.trim()) return
+    loadUserAndItems();
+  }, [router]);
 
-    const { data: userData } = await supabase.auth.getUser()
-    const user = userData.user
+  const total = items.length;
+  const pending = items.filter((item) => !item.completed).length;
+  const done = items.filter((item) => item.completed).length;
+  const favorites = items.filter((item) => item.favorite).length;
 
-    if (!user) {
-      alert('You must be logged in')
-      return
-    }
+  const uniqueStores = useMemo(() => {
+    return [...new Set(items.map((item) => item.store))];
+  }, [items]);
 
-    await supabase.from('items').insert({
-      name,
-      category,
-      supermarket: store,
-      quantity,
-      user_id: user.id,
-    })
+  const uniqueCategories = useMemo(() => {
+    return [...new Set(items.map((item) => item.category))];
+  }, [items]);
 
-    setName('')
-    setQuantity(1)
-    fetchItems()
-  }
-
-  // DELETE
-  const deleteItem = async (id: string) => {
-    await supabase.from('items').delete().eq('id', id)
-    fetchItems()
-  }
-
-  // TOGGLE COMPLETE
-  const toggleComplete = async (item: Item) => {
-    await supabase
-      .from('items')
-      .update({ completed: !item.completed })
-      .eq('id', item.id)
-
-    fetchItems()
-  }
-
-  // TOGGLE FAVORITE
-  const toggleFavorite = async (item: Item) => {
-    await supabase
-      .from('items')
-      .update({ favorite: !item.favorite })
-      .eq('id', item.id)
-
-    fetchItems()
-  }
-
-  // QUANTITY + -
-  const updateQuantity = async (item: Item, value: number) => {
-    if (value < 1) return
-
-    await supabase
-      .from('items')
-      .update({ quantity: value })
-      .eq('id', item.id)
-
-    fetchItems()
-  }
-
-  // CLEAR COMPLETED
-  const clearCompleted = async () => {
-    await supabase.from('items').delete().eq('completed', true)
-    fetchItems()
-  }
-
-  // LOGOUT
-  const logout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
-
-  // ICONS
-  const getIcon = (item: Item) => {
-    const name = item.name.toLowerCase()
-
-    if (name.includes('milk')) return <Milk size={20} />
-    if (name.includes('apple')) return <Apple size={20} />
-    if (name.includes('beef')) return <Beef size={20} />
-    if (name.includes('fish')) return <Fish size={20} />
-    if (name.includes('coffee')) return <Coffee size={20} />
-    if (name.includes('egg')) return <Egg size={20} />
-    if (name.includes('bread')) return <Sandwich size={20} />
-    if (name.includes('candy')) return <Candy size={20} />
-
-    return <ShoppingCart size={20} />
-  }
-
-  // FILTER + SEARCH
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (search && !item.name.toLowerCase().includes(search.toLowerCase()))
-        return false
+      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+      const matchesStore = storeFilter === "all" || item.store === storeFilter;
+      const matchesCategory =
+        categoryFilter === "all" || item.category === categoryFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "pending" && !item.completed) ||
+        (statusFilter === "done" && item.completed);
 
-      if (filterStore !== 'all' && item.supermarket !== filterStore)
-        return false
+      return matchesSearch && matchesStore && matchesCategory && matchesStatus;
+    });
+  }, [items, search, storeFilter, categoryFilter, statusFilter]);
 
-      if (filterCategory !== 'all' && item.category !== filterCategory)
-        return false
+  const addItem = async () => {
+    if (!newItem.trim() || !userId || saving) return;
 
-      if (filterStatus === 'done' && !item.completed) return false
-      if (filterStatus === 'pending' && item.completed) return false
+    setSaving(true);
 
-      return true
-    })
-  }, [items, search, filterStore, filterCategory, filterStatus])
+    const payload = {
+      user_id: userId,
+      name: newItem.trim(),
+      category,
+      store,
+      quantity,
+      completed: false,
+      favorite: false,
+    };
 
-  const total = items.length
-  const done = items.filter((i) => i.completed).length
-  const pending = total - done
+    const { data, error } = await supabase
+      .from("grocery_items")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (!error && data) {
+      setItems((prev) => [data, ...prev]);
+      setNewItem("");
+      setCategory("Food");
+      setStore("Tesco");
+      setQuantity(1);
+    }
+
+    setSaving(false);
+  };
+
+  const updateItem = async (
+    id: string,
+    updates: Partial<
+      Pick<GroceryItem, "completed" | "favorite" | "quantity" | "name" | "store" | "category">
+    >
+  ) => {
+    const previousItems = items;
+    const nextItems = items.map((item) =>
+      item.id === id ? { ...item, ...updates } : item
+    );
+
+    setItems(nextItems);
+
+    const { error } = await supabase
+      .from("grocery_items")
+      .update(updates)
+      .eq("id", id);
+
+    if (error) {
+      setItems(previousItems);
+    }
+  };
+
+  const toggleComplete = async (id: string, currentValue: boolean) => {
+    await updateItem(id, { completed: !currentValue });
+  };
+
+  const toggleFavorite = async (id: string, currentValue: boolean) => {
+    await updateItem(id, { favorite: !currentValue });
+  };
+
+  const increaseQty = async (id: string, currentQty: number) => {
+    await updateItem(id, { quantity: currentQty + 1 });
+  };
+
+  const decreaseQty = async (id: string, currentQty: number) => {
+    await updateItem(id, { quantity: Math.max(1, currentQty - 1) });
+  };
+
+  const deleteItem = async (id: string) => {
+    const previousItems = items;
+    setItems((prev) => prev.filter((item) => item.id !== id));
+
+    const { error } = await supabase.from("grocery_items").delete().eq("id", id);
+
+    if (error) {
+      setItems(previousItems);
+    }
+  };
+
+  const clearCompleted = async () => {
+    const completedIds = items.filter((item) => item.completed).map((item) => item.id);
+    if (completedIds.length === 0) return;
+
+    const previousItems = items;
+    setItems((prev) => prev.filter((item) => !item.completed));
+
+    const { error } = await supabase
+      .from("grocery_items")
+      .delete()
+      .in("id", completedIds);
+
+    if (error) {
+      setItems(previousItems);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#f6f3ee] text-[#111111]">
+        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6">
+          <div className="rounded-3xl border border-black/10 bg-white/80 px-8 py-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+            <p className="text-sm text-black/60">Loading your grocery dashboard...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-[#f6f3ee] text-[#111111]">
+      <div className="mx-auto max-w-7xl px-6 py-8 md:px-8 lg:px-10">
+        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-black/60 backdrop-blur">
+              <Sparkles className="h-4 w-4" />
+              Premium Grocery Dashboard
+            </div>
 
-        {/* HEADER */}
-        <div className="mb-6 flex justify-between items-center">
-          <h1 className="text-3xl font-semibold">AVO Grocery List</h1>
+            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
+              AVO Grocery List
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-black/60 md:text-base">
+              Organise your shopping with a cleaner, more premium experience.
+            </p>
+          </div>
 
           <button
-            onClick={logout}
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-red-50 text-red-600"
+            onClick={handleLogout}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-5 text-sm font-medium text-black shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
+            <LogOut className="h-4 w-4" />
             Logout
           </button>
         </div>
 
-        {/* STATS */}
-        <div className="flex gap-4 mb-6">
-          <div>Total: {total}</div>
-          <div>Pending: {pending}</div>
-          <div>Done: {done}</div>
-        </div>
+        <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Total items" value={total} icon={<LayoutGrid className="h-5 w-5" />} />
+          <StatCard title="Pending" value={pending} icon={<Clock3 className="h-5 w-5" />} />
+          <StatCard title="Completed" value={done} icon={<CheckCircle2 className="h-5 w-5" />} />
+          <StatCard title="Favourites" value={favorites} icon={<Star className="h-5 w-5" />} />
+        </section>
 
-        {/* ADD ITEM */}
-        <div className="mb-6 space-y-3">
-          <input
-            className="w-full border rounded-lg px-3 py-2"
-            placeholder="Add item"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+        <section className="mb-8 rounded-3xl border border-black/10 bg-white/80 p-4 shadow-[0_10px_40px_rgba(0,0,0,0.04)] backdrop-blur md:p-6">
+          <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.5fr_auto]">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-black/70">
+                Add item
+              </label>
+              <input
+                type="text"
+                value={newItem}
+                onChange={(e) => setNewItem(e.target.value)}
+                placeholder="Enter product name"
+                className="h-13 w-full rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addItem();
+                }}
+              />
+            </div>
 
-          <div className="flex gap-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-black/70">
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as Category)}
+                className="h-13 w-full rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
+              >
+                <option>Food</option>
+                <option>Drinks</option>
+                <option>Cleaning</option>
+                <option>Frozen</option>
+                <option>Household</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-black/70">
+                Store
+              </label>
+              <select
+                value={store}
+                onChange={(e) => setStore(e.target.value as StoreType)}
+                className="h-13 w-full rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
+              >
+                <option>Tesco</option>
+                <option>Lidl</option>
+                <option>Costco</option>
+                <option>Aldi</option>
+                <option>Sainsbury&apos;s</option>
+                <option>Asda</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-black/70">
+                Qty
+              </label>
+              <select
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                className="h-13 w-full rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
+              >
+                {Array.from({ length: 20 }, (_, i) => i + 1).map((num) => (
+                  <option key={num} value={num}>
+                    {num}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={addItem}
+                disabled={saving}
+                className="inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-black px-5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                {saving ? "Adding..." : "Add"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-6 rounded-3xl border border-black/10 bg-white/80 p-4 shadow-[0_10px_40px_rgba(0,0,0,0.04)] backdrop-blur md:p-6">
+          <div className="grid gap-4 lg:grid-cols-[1.5fr_repeat(3,0.7fr)_auto]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-13 w-full rounded-2xl border border-black/10 bg-[#faf8f4] pl-11 pr-4 text-sm outline-none transition focus:border-black/30"
+              />
+            </div>
+
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="border rounded-lg px-2 py-2"
+              value={storeFilter}
+              onChange={(e) => setStoreFilter(e.target.value)}
+              className="h-13 rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
             >
-              <option value="food">Food</option>
-              <option value="drinks">Drinks</option>
-              <option value="cleaning">Cleaning</option>
-            </select>
-
-            <select
-              value={store}
-              onChange={(e) => setStore(e.target.value)}
-              className="border rounded-lg px-2 py-2"
-            >
-              <option value="tesco">Tesco</option>
-              <option value="lidl">Lidl</option>
-              <option value="costco">Costco</option>
-              <option value="morrisons">Morrisons</option>
-              <option value="sainsburys">Sainsbury's</option>
-              <option value="iceland">Iceland</option>
-            </select>
-
-            <select
-              value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value))}
-              className="border rounded-lg px-2 py-2"
-            >
-              {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                <option key={n} value={n}>{n}</option>
+              <option value="all">All stores</option>
+              {uniqueStores.map((storeName) => (
+                <option key={storeName} value={storeName}>
+                  {storeName}
+                </option>
               ))}
             </select>
 
-            <button
-              onClick={addItem}
-              className="bg-black text-white px-4 py-2 rounded-lg"
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-13 rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
             >
-              Add
+              <option value="all">All categories</option>
+              {uniqueCategories.map((categoryName) => (
+                <option key={categoryName} value={categoryName}>
+                  {categoryName}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="h-13 rounded-2xl border border-black/10 bg-[#faf8f4] px-4 text-sm outline-none transition focus:border-black/30"
+            >
+              <option value="all">All status</option>
+              <option value="pending">Pending</option>
+              <option value="done">Done</option>
+            </select>
+
+            <button
+              onClick={clearCompleted}
+              className="h-13 rounded-2xl border border-transparent px-4 text-sm font-medium text-[#c25d3f] transition hover:bg-[#fff5f1]"
+            >
+              Clear completed
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* SEARCH */}
-        <input
-          className="mb-4 w-full border rounded-lg px-3 py-2"
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <section className="space-y-4">
+          {filteredItems.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-black/10 bg-white/70 px-6 py-16 text-center shadow-[0_10px_40px_rgba(0,0,0,0.03)]">
+              <ShoppingBag className="mx-auto mb-4 h-10 w-10 text-black/30" />
+              <h3 className="text-lg font-medium">No items found</h3>
+              <p className="mt-2 text-sm text-black/50">
+                Try another search or add a new product to your list.
+              </p>
+            </div>
+          ) : (
+            filteredItems.map((item) => (
+              <article
+                key={item.id}
+                className={`group rounded-3xl border p-4 shadow-[0_10px_40px_rgba(0,0,0,0.03)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_50px_rgba(0,0,0,0.06)] md:p-5 ${
+                  item.completed
+                    ? "border-black/5 bg-white/60 opacity-75"
+                    : "border-black/10 bg-white/85"
+                }`}
+              >
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <button
+                      onClick={() => toggleComplete(item.id, item.completed)}
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition ${
+                        item.completed
+                          ? "border-black bg-black text-white"
+                          : "border-black/20 bg-white text-transparent"
+                      }`}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </button>
 
-        {/* FILTERS */}
-        <div className="flex gap-3 mb-6">
-          <select onChange={(e)=>setFilterStore(e.target.value)}>
-            <option value="all">All stores</option>
-            <option value="tesco">Tesco</option>
-            <option value="lidl">Lidl</option>
-            <option value="costco">Costco</option>
-          </select>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#f3efe8] text-black/70">
+                      {item.category.toLowerCase() === "food" ? (
+                        <ShoppingBag className="h-5 w-5" />
+                      ) : (
+                        <Store className="h-5 w-5" />
+                      )}
+                    </div>
 
-          <select onChange={(e)=>setFilterCategory(e.target.value)}>
-            <option value="all">All categories</option>
-            <option value="food">Food</option>
-            <option value="drinks">Drinks</option>
-          </select>
+                    <div className="min-w-0">
+                      <h3
+                        className={`truncate text-lg font-medium ${
+                          item.completed ? "line-through text-black/40" : ""
+                        }`}
+                      >
+                        {item.name}
+                      </h3>
 
-          <select onChange={(e)=>setFilterStatus(e.target.value)}>
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="done">Done</option>
-          </select>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-black/50">
+                        <span className="rounded-full bg-[#f6f3ee] px-2.5 py-1">
+                          {item.category}
+                        </span>
+                        <span className="rounded-full bg-[#f6f3ee] px-2.5 py-1">
+                          {item.store}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-          <button onClick={clearCompleted} className="text-red-500">
-            Clear completed
-          </button>
-        </div>
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                    <div className="flex items-center rounded-2xl border border-black/10 bg-[#faf8f4] p-1">
+                      <button
+                        onClick={() => decreaseQty(item.id, item.quantity)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-black/70 transition hover:bg-white"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-[2rem] text-center text-sm font-medium">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => increaseQty(item.id, item.quantity)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-black/70 transition hover:bg-white"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
 
-        {/* LIST */}
-        <ul className="space-y-3">
-          {filteredItems.map((item) => (
-            <li key={item.id} className="border rounded-lg p-3 flex justify-between items-center">
+                    <button
+                      onClick={() => toggleFavorite(item.id, item.favorite)}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-black/10 bg-white transition hover:bg-[#faf8f4]"
+                    >
+                      <Star
+                        className={`h-4 w-4 ${
+                          item.favorite ? "fill-[#d4a437] text-[#d4a437]" : "text-black/60"
+                        }`}
+                      />
+                    </button>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={!!item.completed}
-                  onChange={() => toggleComplete(item)}
-                />
-
-                {getIcon(item)}
-
-                <div>
-                  <p className={item.completed ? 'line-through text-gray-400' : ''}>
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {item.category} • {item.supermarket}
-                  </p>
+                    <button
+                      onClick={() => deleteItem(item.id)}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#e7c7be] bg-[#fff8f6] px-4 text-sm font-medium text-[#c25d3f] transition hover:bg-[#fff2ee]"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* QUANTITY */}
-                <button onClick={()=>updateQuantity(item,(item.quantity||1)-1)}>-</button>
-                <span>{item.quantity || 1}</span>
-                <button onClick={()=>updateQuantity(item,(item.quantity||1)+1)}>+</button>
-
-                {/* FAVORITE */}
-                <button onClick={()=>toggleFavorite(item)}>
-                  <Star size={18} className={item.favorite ? 'text-yellow-400' : ''} />
-                </button>
-
-                <button onClick={() => deleteItem(item.id)} className="text-red-500">
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </article>
+            ))
+          )}
+        </section>
       </div>
     </main>
-  )
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-[0_10px_40px_rgba(0,0,0,0.04)] backdrop-blur">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-sm text-black/55">{title}</div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f3efe8] text-black/70">
+          {icon}
+        </div>
+      </div>
+      <div className="text-3xl font-semibold tracking-tight">{value}</div>
+    </div>
+  );
 }
