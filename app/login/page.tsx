@@ -54,7 +54,7 @@ export default function LoginPage() {
           return;
         }
 
-        setSuccess("Account created successfully. You can now access your dashboard.");
+        setSuccess("Account created successfully. You can now log in to your dashboard.");
         setIsLogin(true);
         setPassword("");
       }
@@ -184,13 +184,13 @@ export default function LoginPage() {
                 </div>
 
                 {error && (
-                  <div className="rounded-2xl border border-[#ffb4a2]/30 bg-[#ffede8] px-4 py-3 text-sm text-[#ffb4a2]">
+                  <div className="rounded-2xl border border-[#f1a695]/25 bg-[#3a1f24] px-4 py-3 text-sm text-[#ffd8cf]">
                     {error}
                   </div>
                 )}
 
                 {success && (
-                  <div className="rounded-2xl border border-[#8ed0b5]/30 bg-[#eaf8f1] px-4 py-3 text-sm text-[#9be2c4]">
+                  <div className="rounded-2xl border border-[#7fd0b0]/25 bg-[#15352d] px-4 py-3 text-sm text-[#d7fff0]">
                     {success}
                   </div>
                 )}
