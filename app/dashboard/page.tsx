@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -287,13 +287,20 @@ export default function DashboardPage() {
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-4">
-              <button className="w-full rounded-2xl bg-[#0c1730] px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:opacity-95 sm:w-auto sm:px-7 sm:py-4 sm:text-lg">
-                Open Grocery List
-              </button>
-              <button className="w-full rounded-2xl border border-[#d8dfeb] bg-white px-5 py-3.5 text-base font-semibold text-[#0d1730] transition hover:bg-[#f8fbff] sm:w-auto sm:px-7 sm:py-4 sm:text-lg">
-                Manage Stores
-              </button>
-            </div>
+  <Link
+    href="/grocery"
+    className="w-full rounded-2xl bg-[#0c1730] px-5 py-3.5 text-center text-base font-semibold text-white shadow-sm transition hover:opacity-95 sm:w-auto sm:px-7 sm:py-4 sm:text-lg"
+  >
+    Open Grocery List
+  </Link>
+
+  <Link
+    href="/stores"
+    className="w-full rounded-2xl border border-[#d8dfeb] bg-white px-5 py-3.5 text-center text-base font-semibold text-[#0d1730] transition hover:bg-[#f8fbff] sm:w-auto sm:px-7 sm:py-4 sm:text-lg"
+  >
+    Manage Stores
+  </Link>
+</div>
 
             <div className="mt-8 rounded-[24px] border border-[#dde3ee] bg-[#f8fbff] p-5 sm:mt-8 sm:rounded-[28px] sm:p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
