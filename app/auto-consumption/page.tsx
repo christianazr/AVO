@@ -81,23 +81,19 @@ export default function AutoConsumptionPage() {
       setError("");
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (userError) throw userError;
-      if (!user) {
-        setError("You must be logged in to use auto-consumption.");
+      if (!session) {
+        setError("Auth session missing!");
+        setLoading(false);
         return;
       }
 
-      setUserId(user.id);
+      const uid = session.user.id;
+      setUserId(uid);
 
-      await Promise.all([
-        loadStores(user.id),
-        loadTrackedItems(user.id),
-        loadGroceryItems(user.id),
-      ]);
+      await Promise.all([loadStores(uid), loadTrackedItems(uid), loadGroceryItems(uid)]);
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Failed to load auto-consumption page.");
@@ -180,8 +176,7 @@ export default function AutoConsumptionPage() {
     if (stockPercent <= item.threshold_percent) {
       return {
         label: "Low",
-        tone:
-          "bg-red-500/15 text-red-300 border border-red-500/20",
+        tone: "bg-red-500/15 text-red-300 border border-red-500/20",
         barClass: "bg-red-400",
       };
     }
@@ -189,16 +184,14 @@ export default function AutoConsumptionPage() {
     if (stockPercent <= item.threshold_percent + 20) {
       return {
         label: "Watch",
-        tone:
-          "bg-amber-500/15 text-amber-300 border border-amber-500/20",
+        tone: "bg-amber-500/15 text-amber-300 border border-amber-500/20",
         barClass: "bg-amber-400",
       };
     }
 
     return {
       label: "Healthy",
-      tone:
-        "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20",
+      tone: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20",
       barClass: "bg-emerald-400",
     };
   }
@@ -274,11 +267,7 @@ export default function AutoConsumptionPage() {
       return;
     }
 
-    if (
-      Number.isNaN(parsedThreshold) ||
-      parsedThreshold < 0 ||
-      parsedThreshold > 100
-    ) {
+    if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 100) {
       setError("Threshold must be between 0 and 100.");
       return;
     }
@@ -355,11 +344,7 @@ export default function AutoConsumptionPage() {
       return;
     }
 
-    if (
-      Number.isNaN(parsedThreshold) ||
-      parsedThreshold < 0 ||
-      parsedThreshold > 100
-    ) {
+    if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 100) {
       setError("Threshold must be between 0 and 100.");
       return;
     }
@@ -403,9 +388,7 @@ export default function AutoConsumptionPage() {
   async function handleDeleteItem(id: string) {
     if (!userId) return;
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this tracked item?"
-    );
+    const confirmed = window.confirm("Are you sure you want to delete this tracked item?");
     if (!confirmed) return;
 
     try {
@@ -507,8 +490,7 @@ export default function AutoConsumptionPage() {
               Auto-consumption
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-white/60 sm:text-base">
-              Track home stock levels and automatically push low items into your
-              grocery list before you run out.
+              Track home stock levels and automatically push low items into your grocery list before you run out.
             </p>
           </div>
 
@@ -603,9 +585,7 @@ export default function AutoConsumptionPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-2 block text-sm text-white/70">
-                    Current stock
-                  </label>
+                  <label className="mb-2 block text-sm text-white/70">Current stock</label>
                   <input
                     type="number"
                     min="0"
@@ -616,9 +596,7 @@ export default function AutoConsumptionPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm text-white/70">
-                    Target stock
-                  </label>
+                  <label className="mb-2 block text-sm text-white/70">Target stock</label>
                   <input
                     type="number"
                     min="1"
@@ -630,9 +608,7 @@ export default function AutoConsumptionPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">
-                  Threshold %
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Threshold %</label>
                 <input
                   type="number"
                   min="0"
@@ -642,8 +618,7 @@ export default function AutoConsumptionPage() {
                   className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-black/60"
                 />
                 <p className="mt-2 text-xs leading-relaxed text-white/40">
-                  Example: if threshold is 25, the item is auto-added when current
-                  stock is 25% or less of target stock.
+                  Example: if threshold is 25, the item is auto-added when current stock is 25% or less of target stock.
                 </p>
               </div>
 
@@ -695,14 +670,8 @@ export default function AutoConsumptionPage() {
             ) : (
               <div className="space-y-4">
                 {trackedItems.map((item) => {
-                  const stockPercent = getStockPercent(
-                    item.current_stock,
-                    item.target_stock
-                  );
-                  const suggestedPurchase = getSuggestedPurchase(
-                    item.current_stock,
-                    item.target_stock
-                  );
+                  const stockPercent = getStockPercent(item.current_stock, item.target_stock);
+                  const suggestedPurchase = getSuggestedPurchase(item.current_stock, item.target_stock);
                   const status = getStatus(item);
                   const isEditing = editingId === item.id;
 
@@ -762,9 +731,7 @@ export default function AutoConsumptionPage() {
                           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/55">
                             <span>Threshold: {item.threshold_percent}%</span>
                             <span>Suggested purchase: {suggestedPurchase}</span>
-                            <span>
-                              Auto add: {item.auto_add_enabled ? "Enabled" : "Disabled"}
-                            </span>
+                            <span>Auto add: {item.auto_add_enabled ? "Enabled" : "Disabled"}</span>
                             <span>
                               Pending in grocery list:{" "}
                               {groceryItems.some(
@@ -782,9 +749,7 @@ export default function AutoConsumptionPage() {
                         <div className="space-y-4">
                           <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">
-                                Item name
-                              </label>
+                              <label className="mb-2 block text-sm text-white/70">Item name</label>
                               <input
                                 value={editItemName}
                                 onChange={(e) => setEditItemName(e.target.value)}
@@ -793,9 +758,7 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">
-                                Store
-                              </label>
+                              <label className="mb-2 block text-sm text-white/70">Store</label>
                               <select
                                 value={editStoreId}
                                 onChange={(e) => setEditStoreId(e.target.value)}
@@ -813,9 +776,7 @@ export default function AutoConsumptionPage() {
 
                           <div className="grid gap-4 sm:grid-cols-3">
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">
-                                Current stock
-                              </label>
+                              <label className="mb-2 block text-sm text-white/70">Current stock</label>
                               <input
                                 type="number"
                                 min="0"
@@ -826,9 +787,7 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">
-                                Target stock
-                              </label>
+                              <label className="mb-2 block text-sm text-white/70">Target stock</label>
                               <input
                                 type="number"
                                 min="1"
@@ -839,9 +798,7 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">
-                                Threshold %
-                              </label>
+                              <label className="mb-2 block text-sm text-white/70">Threshold %</label>
                               <input
                                 type="number"
                                 min="0"
