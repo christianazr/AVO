@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -8,7 +8,6 @@ import {
   Circle,
   Pencil,
   Plus,
-  ShoppingCart,
   Store,
   Trash2,
   Sparkles,
@@ -45,6 +44,24 @@ const categories = [
 ];
 
 export default function GroceryPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen text-white">
+          <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
+            <div className="rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+              <p className="text-sm text-white/60">Loading grocery page...</p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <GroceryPageContent />
+    </Suspense>
+  );
+}
+
+function GroceryPageContent() {
   const searchParams = useSearchParams();
 
   const initialStoreParam = searchParams.get("store");
