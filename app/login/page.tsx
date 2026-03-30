@@ -13,47 +13,46 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [pageReady, setPageReady] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
     let mounted = true;
 
-    const checkSession = async () => {
+    async function bootstrap() {
       try {
         const {
           data: { session },
+          error,
         } = await supabase.auth.getSession();
 
-        if (mounted && session) {
+        if (error) {
+          console.error("Session check error:", error);
+        }
+
+        if (!mounted) return;
+
+        if (session) {
           router.replace("/dashboard");
           return;
         }
+
+        setPageReady(true);
       } catch (err) {
-        console.error("Session check error:", err);
-      } finally {
-        if (mounted) setCheckingSession(false);
+        console.error("Bootstrap error:", err);
+        if (mounted) setPageReady(true);
       }
-    };
+    }
 
-    void checkSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.replace("/dashboard");
-      }
-    });
+    void bootstrap();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
   }, [router]);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSuccess("");
@@ -68,39 +67,40 @@ export default function LoginPage() {
 
         if (error) throw error;
 
-        setSuccess("Login successful. Redirecting...");
         router.replace("/dashboard");
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-            },
-          },
-        });
-
-        if (error) throw error;
-
-        setSuccess("Account created successfully. You can now sign in.");
-        setIsLogin(true);
-        setPassword("");
+        router.refresh();
+        return;
       }
+
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      setSuccess("Account created successfully. You can now sign in.");
+      setIsLogin(true);
+      setPassword("");
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Authentication failed.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  if (checkingSession) {
+  if (!pageReady) {
     return (
       <div className="min-h-screen bg-black text-white">
         <div className="relative mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-5 text-sm text-white/70 backdrop-blur-xl">
-            Checking session...
+            Loading...
           </div>
         </div>
       </div>
