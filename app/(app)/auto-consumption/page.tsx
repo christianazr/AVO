@@ -20,15 +20,15 @@ type Store = {
   created_at?: string;
 };
 
-type AutoConsumptionRule = {
+type AutoConsumptionItem = {
   id: string;
   user_id: string;
-  product_name: string;
-  category: string;
+  product_name: string | null;
+  category: string | null;
   store_id: string | null;
-  threshold_percent: number;
-  is_active: boolean;
-  created_at?: string;
+  threshold_percent: number | null;
+  is_active: boolean | null;
+  created_at?: string | null;
 };
 
 const categories = [
@@ -50,14 +50,14 @@ export default function AutoConsumptionPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   const [stores, setStores] = useState<Store[]>([]);
-  const [rules, setRules] = useState<AutoConsumptionRule[]>([]);
+  const [items, setItems] = useState<AutoConsumptionItem[]>([]);
 
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("Other");
   const [selectedStore, setSelectedStore] = useState("");
   const [thresholdPercent, setThresholdPercent] = useState(25);
 
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const [loadingPage, setLoadingPage] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,7 +85,7 @@ export default function AutoConsumptionPage() {
 
     setUserId(user.id);
 
-    const [storesRes, rulesRes] = await Promise.all([
+    const [storesRes, itemsRes] = await Promise.all([
       supabase
         .from("stores")
         .select("id, user_id, name, created_at")
@@ -93,7 +93,7 @@ export default function AutoConsumptionPage() {
         .order("name", { ascending: true }),
 
       supabase
-        .from("auto_consumption_rules")
+        .from("auto_consumption_items")
         .select(
           "id, user_id, product_name, category, store_id, threshold_percent, is_active, created_at"
         )
@@ -102,15 +102,17 @@ export default function AutoConsumptionPage() {
     ]);
 
     if (storesRes.error) {
+      console.error("Error loading stores:", storesRes.error);
       setError("Failed to load stores.");
     } else {
       setStores(storesRes.data || []);
     }
 
-    if (rulesRes.error) {
-      setError((prev) => prev || "Failed to load auto-consumption rules.");
+    if (itemsRes.error) {
+      console.error("Error loading auto-consumption items:", itemsRes.error);
+      setError("Failed to load auto-consumption items.");
     } else {
-      setRules(rulesRes.data || []);
+      setItems(itemsRes.data || []);
     }
 
     setLoadingPage(false);
@@ -125,10 +127,10 @@ export default function AutoConsumptionPage() {
     setCategory("Other");
     setSelectedStore("");
     setThresholdPercent(25);
-    setEditingRuleId(null);
+    setEditingItemId(null);
   }
 
-  async function handleSaveRule(e: React.FormEvent) {
+  async function handleSaveItem(e: React.FormEvent) {
     e.preventDefault();
 
     if (!userId) {
@@ -159,32 +161,34 @@ export default function AutoConsumptionPage() {
       is_active: true,
     };
 
-    if (editingRuleId) {
+    if (editingItemId) {
       const { error } = await supabase
-        .from("auto_consumption_rules")
+        .from("auto_consumption_items")
         .update(payload)
-        .eq("id", editingRuleId)
+        .eq("id", editingItemId)
         .eq("user_id", userId);
 
       if (error) {
-        setError("Failed to update rule.");
+        console.error("Error updating auto-consumption item:", error);
+        setError("Failed to update auto-consumption item.");
         setSaving(false);
         return;
       }
 
-      setSuccess("Rule updated successfully.");
+      setSuccess("Auto-consumption item updated successfully.");
     } else {
       const { error } = await supabase
-        .from("auto_consumption_rules")
+        .from("auto_consumption_items")
         .insert([payload]);
 
       if (error) {
-        setError("Failed to create rule.");
+        console.error("Error creating auto-consumption item:", error);
+        setError("Failed to create auto-consumption item.");
         setSaving(false);
         return;
       }
 
-      setSuccess("Rule created successfully.");
+      setSuccess("Auto-consumption item created successfully.");
     }
 
     await loadPageData();
@@ -192,21 +196,21 @@ export default function AutoConsumptionPage() {
     setSaving(false);
   }
 
-  function handleEditRule(rule: AutoConsumptionRule) {
-    setEditingRuleId(rule.id);
-    setProductName(rule.product_name);
-    setCategory(rule.category || "Other");
-    setSelectedStore(rule.store_id || "");
-    setThresholdPercent(rule.threshold_percent || 25);
+  function handleEditItem(item: AutoConsumptionItem) {
+    setEditingItemId(item.id);
+    setProductName(item.product_name || "");
+    setCategory(item.category || "Other");
+    setSelectedStore(item.store_id || "");
+    setThresholdPercent(item.threshold_percent || 25);
     setError("");
     setSuccess("");
   }
 
-  async function handleDeleteRule(ruleId: string) {
+  async function handleDeleteItem(itemId: string) {
     if (!userId) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to delete this auto-consumption rule?"
+      "Are you sure you want to delete this auto-consumption item?"
     );
     if (!confirmed) return;
 
@@ -214,41 +218,45 @@ export default function AutoConsumptionPage() {
     setSuccess("");
 
     const { error } = await supabase
-      .from("auto_consumption_rules")
+      .from("auto_consumption_items")
       .delete()
-      .eq("id", ruleId)
+      .eq("id", itemId)
       .eq("user_id", userId);
 
     if (error) {
-      setError("Failed to delete rule.");
+      console.error("Error deleting auto-consumption item:", error);
+      setError("Failed to delete auto-consumption item.");
       return;
     }
 
-    if (editingRuleId === ruleId) {
+    if (editingItemId === itemId) {
       resetForm();
     }
 
-    setRules((prev) => prev.filter((rule) => rule.id !== ruleId));
-    setSuccess("Rule deleted successfully.");
+    setItems((prev) => prev.filter((item) => item.id !== itemId));
+    setSuccess("Auto-consumption item deleted successfully.");
   }
 
-  async function handleToggleRule(rule: AutoConsumptionRule) {
+  async function handleToggleItem(item: AutoConsumptionItem) {
     if (!userId) return;
 
     const { error } = await supabase
-      .from("auto_consumption_rules")
-      .update({ is_active: !rule.is_active })
-      .eq("id", rule.id)
+      .from("auto_consumption_items")
+      .update({ is_active: !item.is_active })
+      .eq("id", item.id)
       .eq("user_id", userId);
 
     if (error) {
-      setError("Failed to update rule status.");
+      console.error("Error toggling auto-consumption item:", error);
+      setError("Failed to update auto-consumption item status.");
       return;
     }
 
-    setRules((prev) =>
-      prev.map((item) =>
-        item.id === rule.id ? { ...item, is_active: !item.is_active } : item
+    setItems((prev) =>
+      prev.map((current) =>
+        current.id === item.id
+          ? { ...current, is_active: !current.is_active }
+          : current
       )
     );
   }
@@ -289,13 +297,11 @@ export default function AutoConsumptionPage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.6fr]">
           <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_40px_rgba(0,0,0,0.25)] sm:p-6">
             <h2 className="text-2xl font-semibold">
-              {editingRuleId ? "Edit rule" : "Add new rule"}
+              {editingItemId ? "Edit item" : "Add new rule"}
             </h2>
-            <p className="mt-1 text-white/60">
-              Trigger by stock percentage
-            </p>
+            <p className="mt-1 text-white/60">Trigger by stock percentage</p>
 
-            <form onSubmit={handleSaveRule} className="mt-6 space-y-5">
+            <form onSubmit={handleSaveItem} className="mt-6 space-y-5">
               <div>
                 <label className="mb-2 block text-sm text-white/80">
                   Product name
@@ -384,7 +390,7 @@ export default function AutoConsumptionPage() {
                 </div>
 
                 <p className="mt-3 text-sm text-white/50">
-                  Example: when stock falls below {thresholdPercent}%, this rule
+                  Example: when stock falls below {thresholdPercent}%, this item
                   is ready to be used.
                 </p>
               </div>
@@ -398,12 +404,12 @@ export default function AutoConsumptionPage() {
                   <Plus size={18} />
                   {saving
                     ? "Saving..."
-                    : editingRuleId
-                    ? "Update rule"
-                    : "Add rule"}
+                    : editingItemId
+                    ? "Update item"
+                    : "Add item"}
                 </button>
 
-                {editingRuleId ? (
+                {editingItemId ? (
                   <button
                     type="button"
                     onClick={resetForm}
@@ -417,38 +423,40 @@ export default function AutoConsumptionPage() {
           </section>
 
           <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_40px_rgba(0,0,0,0.25)] sm:p-6">
-            <h2 className="text-2xl font-semibold">Your auto-consumption rules</h2>
+            <h2 className="text-2xl font-semibold">
+              Your auto-consumption items
+            </h2>
             <p className="mt-1 text-white/60">
-              Rules linked to your products, categories and stores
+              Items linked to your products, categories and stores
             </p>
 
             <div className="mt-6">
               {loadingPage ? (
                 <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-8 text-white/50">
-                  Loading rules...
+                  Loading items...
                 </div>
-              ) : rules.length === 0 ? (
+              ) : items.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-8 text-white/50">
-                  No auto-consumption rules yet.
+                  No auto-consumption items yet.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {rules.map((rule) => (
+                  {items.map((item) => (
                     <div
-                      key={rule.id}
+                      key={item.id}
                       className="rounded-[26px] border border-white/10 bg-white/[0.04] p-4 transition hover:bg-white/[0.06]"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-start gap-4">
                           <button
                             type="button"
-                            onClick={() => handleToggleRule(rule)}
+                            onClick={() => handleToggleItem(item)}
                             className="mt-1 text-white/75 transition hover:text-white"
                             aria-label={
-                              rule.is_active ? "Disable rule" : "Enable rule"
+                              item.is_active ? "Disable item" : "Enable item"
                             }
                           >
-                            {rule.is_active ? (
+                            {item.is_active ? (
                               <CheckCircle2 size={22} />
                             ) : (
                               <Circle size={22} />
@@ -457,33 +465,33 @@ export default function AutoConsumptionPage() {
 
                           <div>
                             <h3 className="text-lg font-semibold">
-                              {rule.product_name}
+                              {item.product_name || "Unnamed item"}
                             </h3>
 
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/65">
                               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                                {rule.category || "Other"}
+                                {item.category || "Other"}
                               </span>
 
                               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                                Below {rule.threshold_percent}%
+                                Below {item.threshold_percent ?? 25}%
                               </span>
 
                               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
                                 <StoreIcon size={14} />
-                                {rule.store_id
-                                  ? storeMap.get(rule.store_id) || "Unknown store"
+                                {item.store_id
+                                  ? storeMap.get(item.store_id) || "Unknown store"
                                   : "No store"}
                               </span>
 
                               <span
                                 className={`rounded-full px-3 py-1 ${
-                                  rule.is_active
+                                  item.is_active
                                     ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
                                     : "border border-white/10 bg-white/5 text-white/55"
                                 }`}
                               >
-                                {rule.is_active ? "Active" : "Paused"}
+                                {item.is_active ? "Active" : "Paused"}
                               </span>
                             </div>
                           </div>
@@ -492,18 +500,18 @@ export default function AutoConsumptionPage() {
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                           <button
                             type="button"
-                            onClick={() => handleEditRule(rule)}
+                            onClick={() => handleEditItem(item)}
                             className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 transition hover:bg-white/10 hover:text-white"
-                            aria-label="Edit rule"
+                            aria-label="Edit item"
                           >
                             <Pencil size={18} />
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => handleDeleteRule(rule.id)}
+                            onClick={() => handleDeleteItem(item.id)}
                             className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 transition hover:bg-red-500/15 hover:text-red-200"
-                            aria-label="Delete rule"
+                            aria-label="Delete item"
                           >
                             <Trash2 size={18} />
                           </button>
