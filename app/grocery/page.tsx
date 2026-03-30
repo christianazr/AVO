@@ -1,290 +1,351 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { createClient } from '../../lib/supabase/client'
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import {
+  CheckCircle2,
+  ShoppingCart,
+  Trash2,
+  Store as StoreIcon,
+  Package,
+} from "lucide-react";
 
 type GroceryItem = {
-  id: string
-  name: string
-  quantity: number | null
-  category: string | null
-  completed: boolean
-  store_id: string | null
-  store_name: string | null
-  created_at: string | null
-}
+  id: string;
+  user_id: string;
+  name: string;
+  quantity: number;
+  category: string | null;
+  store_id: string | null;
+  status: string;
+  source?: string | null;
+  auto_generated?: boolean | null;
+  created_at?: string;
+};
 
 type Store = {
-  id: string
-  name: string
-}
+  id: string;
+  name: string;
+};
 
-type FilterType = 'all' | 'pending' | 'completed'
-
-const categories = [
-  'Fruit & Veg',
-  'Dairy',
-  'Meat',
-  'Frozen',
-  'Bakery',
-  'Drinks',
-  'Snacks',
-  'Cleaning',
-  'Other',
-]
+type FilterType = "all" | "pending" | "completed";
 
 export default function GroceryPage() {
-  const supabase = createClient()
+  const [userId, setUserId] = useState<string | null>(null);
+  const [items, setItems] = useState<GroceryItem[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [filter, setFilter] = useState<FilterType>("all");
 
-  const [items, setItems] = useState<GroceryItem[]>([])
-  const [stores, setStores] = useState<Store[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [filter, setFilter] = useState<FilterType>('all')
-  const [message, setMessage] = useState('')
+  const [itemName, setItemName] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [category, setCategory] = useState("Other");
+  const [selectedStoreId, setSelectedStoreId] = useState("");
 
-  const [name, setName] = useState('')
-  const [quantity, setQuantity] = useState('1')
-  const [category, setCategory] = useState('Other')
-  const [storeId, setStoreId] = useState('')
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    void loadData()
-  }, [])
+    void initializePage();
+  }, []);
 
-  async function loadData() {
-    setLoading(true)
-    setMessage('')
+  async function initializePage() {
+    try {
+      setLoading(true);
+      setError("");
+      setMessage("");
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    if (userError || !user) {
-      setMessage('Unable to load your session.')
-      setLoading(false)
-      return
+      if (sessionError) throw sessionError;
+      if (!session) {
+        setError("Auth session missing!");
+        return;
+      }
+
+      const uid = session.user.id;
+      setUserId(uid);
+
+      await Promise.all([loadStores(uid), loadGroceryItems(uid)]);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to load grocery page.");
+    } finally {
+      setLoading(false);
     }
-
-    const [itemsRes, storesRes] = await Promise.all([
-      supabase
-        .from('grocery_items')
-        .select('id, name, quantity, category, completed, store_id, store_name, created_at')
-        .order('created_at', { ascending: false }),
-      supabase.from('stores').select('id, name').order('name', { ascending: true }),
-    ])
-
-    if (itemsRes.error) {
-      console.error(itemsRes.error)
-      setMessage('Failed to load grocery items.')
-    } else {
-      setItems((itemsRes.data ?? []) as GroceryItem[])
-    }
-
-    if (storesRes.error) {
-      console.error(storesRes.error)
-    } else {
-      setStores((storesRes.data ?? []) as Store[])
-    }
-
-    setLoading(false)
   }
 
-  function resetForm() {
-    setName('')
-    setQuantity('1')
-    setCategory('Other')
-    setStoreId('')
+  async function loadStores(uid: string) {
+    const { data, error } = await supabase
+      .from("stores")
+      .select("id, name")
+      .eq("user_id", uid)
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    setStores((data || []) as Store[]);
   }
 
-  function getStoreName(selectedId: string) {
-    return stores.find((store) => store.id === selectedId)?.name ?? null
+  async function loadGroceryItems(uid: string) {
+    const { data, error } = await supabase
+      .from("grocery_items")
+      .select("*")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    setItems((data || []) as GroceryItem[]);
+  }
+
+  function getStoreName(storeId: string | null) {
+    if (!storeId) return "No store";
+    const store = stores.find((s) => s.id === storeId);
+    return store?.name || "No store";
+  }
+
+  function clearForm() {
+    setItemName("");
+    setQuantity("1");
+    setCategory("Other");
+    setSelectedStoreId("");
   }
 
   async function handleAddItem(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
-    setMessage('')
+    e.preventDefault();
 
-    const trimmedName = name.trim()
-
-    if (!trimmedName) {
-      setMessage('Please enter an item name.')
-      setSaving(false)
-      return
+    if (!userId) {
+      setError("Auth session missing!");
+      return;
     }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      setMessage('Unable to identify the signed-in user.')
-      setSaving(false)
-      return
+    if (!itemName.trim()) {
+      setError("Please enter an item name.");
+      return;
     }
 
-    const selectedStoreName = storeId ? getStoreName(storeId) : null
+    const parsedQuantity = Number(quantity);
 
-    const payload = {
-      user_id: user.id,
-      name: trimmedName,
-      quantity: Number(quantity) || 1,
-      category,
-      completed: false,
-      store_id: storeId || null,
-      store_name: selectedStoreName,
+    if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      setError("Quantity must be greater than 0.");
+      return;
     }
 
-    const { error } = await supabase.from('grocery_items').insert(payload)
+    try {
+      setSaving(true);
+      setError("");
+      setMessage("");
 
-   if (error) {
-  console.error('Insert grocery item error:', error)
-  setMessage(error.message || 'Failed to add item.')
-  setSaving(false)
-  return
-}
+      const payload = {
+        user_id: userId,
+        name: itemName.trim(),
+        quantity: parsedQuantity,
+        category,
+        store_id: selectedStoreId || null,
+        status: "pending",
+      };
 
-    resetForm()
-    await loadData()
-    setMessage('Item added.')
-    setSaving(false)
+      const { error } = await supabase.from("grocery_items").insert(payload);
+
+      if (error) throw error;
+
+      await loadGroceryItems(userId);
+      clearForm();
+      setMessage("Item added successfully.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not add item.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function handleToggleComplete(itemId: string, currentValue: boolean) {
-    const { error } = await supabase
-      .from('grocery_items')
-      .update({ completed: !currentValue })
-      .eq('id', itemId)
+  async function handleMarkDone(id: string) {
+    if (!userId) return;
 
-    if (error) {
-      console.error(error)
-      setMessage('Failed to update item.')
-      return
+    try {
+      setError("");
+      setMessage("");
+
+      const { error } = await supabase
+        .from("grocery_items")
+        .update({ status: "completed" })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      await loadGroceryItems(userId);
+      setMessage("Item marked as completed.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not update item.");
     }
-
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, completed: !currentValue } : item
-      )
-    )
   }
 
-  async function handleDelete(itemId: string) {
-    const confirmed = window.confirm('Delete this grocery item?')
-    if (!confirmed) return
+  async function handleMarkPending(id: string) {
+    if (!userId) return;
 
-    const { error } = await supabase.from('grocery_items').delete().eq('id', itemId)
+    try {
+      setError("");
+      setMessage("");
 
-    if (error) {
-      console.error(error)
-      setMessage('Failed to delete item.')
-      return
+      const { error } = await supabase
+        .from("grocery_items")
+        .update({ status: "pending" })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      await loadGroceryItems(userId);
+      setMessage("Item moved back to pending.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not update item.");
     }
+  }
 
-    setItems((prev) => prev.filter((item) => item.id !== itemId))
+  async function handleDeleteItem(id: string) {
+    if (!userId) return;
+
+    const confirmed = window.confirm("Are you sure you want to delete this item?");
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      setMessage("");
+
+      const { error } = await supabase
+        .from("grocery_items")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      await loadGroceryItems(userId);
+      setMessage("Item deleted successfully.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not delete item.");
+    }
   }
 
   const filteredItems = useMemo(() => {
-    if (filter === 'pending') return items.filter((item) => !item.completed)
-    if (filter === 'completed') return items.filter((item) => item.completed)
-    return items
-  }, [items, filter])
+    if (filter === "pending") {
+      return items.filter((item) => item.status === "pending");
+    }
+    if (filter === "completed") {
+      return items.filter((item) => item.status === "completed");
+    }
+    return items;
+  }, [items, filter]);
 
   const stats = useMemo(() => {
-    const total = items.length
-    const completed = items.filter((item) => item.completed).length
-    const pending = total - completed
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0
+    const total = items.length;
+    const pending = items.filter((item) => item.status === "pending").length;
+    const completed = items.filter((item) => item.status === "completed").length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { total, completed, pending, progress }
-  }, [items])
+    return { total, pending, completed, progress };
+  }, [items]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f3f6fb] text-[#0b2463]">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-10 w-72 rounded-xl bg-slate-200" />
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="h-28 rounded-3xl bg-white" />
+              <div className="h-28 rounded-3xl bg-white" />
+              <div className="h-28 rounded-3xl bg-white" />
+              <div className="h-28 rounded-3xl bg-white" />
+            </div>
+            <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
+              <div className="h-[560px] rounded-3xl bg-white" />
+              <div className="h-[560px] rounded-3xl bg-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#edf1f7] text-[#0d1b4c]">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
-        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#315efb] sm:text-sm">
-              Grocery
-            </p>
-            <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
-              Grocery List
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#5d6d92] sm:text-base">
-              Organise your shopping items, keep track of what is still pending,
-              and manage your list with a clean mobile-friendly layout.
-            </p>
+    <div className="min-h-screen bg-[#f3f6fb] text-[#0b2463]">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+            <ShoppingCart className="h-3.5 w-3.5" />
+            Organised grocery planning
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/dashboard"
-              className="rounded-2xl border border-[#d8dfea] bg-white px-5 py-3 text-sm font-semibold text-[#0d1b4c] shadow-sm transition hover:-translate-y-0.5 sm:text-base"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/stores"
-              className="rounded-2xl border border-[#d8dfea] bg-white px-5 py-3 text-sm font-semibold text-[#0d1b4c] shadow-sm transition hover:-translate-y-0.5 sm:text-base"
-            >
-              Stores
-            </Link>
-            <Link
-              href="/auto-consumption"
-              className="rounded-2xl border border-[#d8dfea] bg-white px-5 py-3 text-sm font-semibold text-[#0d1b4c] shadow-sm transition hover:-translate-y-0.5 sm:text-base"
-            >
-              Auto Consumption
-            </Link>
-          </div>
-        </header>
+          <h1 className="text-4xl font-semibold tracking-tight">Grocery list</h1>
+          <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-600">
+            Organise your shopping items, keep track of what is still pending, and
+            manage your list with a clean mobile-friendly layout.
+          </p>
+        </div>
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6b7a99]">Total items</p>
-            <p className="mt-2 text-3xl font-bold">{stats.total}</p>
+        {(message || error) && (
+          <div className="mb-6 space-y-3">
+            {message && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {message}
+              </div>
+            )}
+            {error && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
           </div>
+        )}
 
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6b7a99]">Pending</p>
-            <p className="mt-2 text-3xl font-bold">{stats.pending}</p>
+        <div className="mb-8 grid gap-4 md:grid-cols-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 text-sm text-slate-500">Total items</div>
+            <div className="text-4xl font-semibold">{stats.total}</div>
           </div>
 
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6b7a99]">Completed</p>
-            <p className="mt-2 text-3xl font-bold">{stats.completed}</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 text-sm text-slate-500">Pending</div>
+            <div className="text-4xl font-semibold">{stats.pending}</div>
           </div>
 
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6b7a99]">Progress</p>
-            <p className="mt-2 text-3xl font-bold">{stats.progress}%</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 text-sm text-slate-500">Completed</div>
+            <div className="text-4xl font-semibold">{stats.completed}</div>
           </div>
-        </section>
 
-        <section className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-2xl font-bold text-[#0b1742]">Add item</h2>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 text-sm text-slate-500">Progress</div>
+            <div className="text-4xl font-semibold">{stats.progress}%</div>
+          </div>
+        </div>
 
-            <form onSubmit={handleAddItem} className="mt-6 space-y-4">
+        <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
+          <div className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-sm">
+            <h2 className="text-3xl font-semibold">Add item</h2>
+
+            <form onSubmit={handleAddItem} className="mt-8 space-y-6">
               <div>
-                <label className="mb-2 block text-sm font-medium text-[#33415c]">
+                <label className="mb-3 block text-sm font-medium text-slate-700">
                   Item name
                 </label>
                 <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
                   placeholder="Milk"
-                  className="h-13 w-full rounded-2xl border border-[#d8dfea] bg-[#f9fbff] px-4 py-3 text-base outline-none transition focus:border-[#315efb]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-xl text-[#0b2463] outline-none transition focus:border-[#0b2463]/30 focus:bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-[#33415c]">
+                  <label className="mb-3 block text-sm font-medium text-slate-700">
                     Quantity
                   </label>
                   <input
@@ -292,36 +353,37 @@ export default function GroceryPage() {
                     min="1"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="h-13 w-full rounded-2xl border border-[#d8dfea] bg-[#f9fbff] px-4 py-3 text-base outline-none transition focus:border-[#315efb]"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-xl text-[#0b2463] outline-none transition focus:border-[#0b2463]/30 focus:bg-white"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-[#33415c]">
+                  <label className="mb-3 block text-sm font-medium text-slate-700">
                     Category
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="h-13 w-full rounded-2xl border border-[#d8dfea] bg-[#f9fbff] px-4 py-3 text-base outline-none transition focus:border-[#315efb]"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-xl text-[#0b2463] outline-none transition focus:border-[#0b2463]/30 focus:bg-white"
                   >
-                    {categories.map((entry) => (
-                      <option key={entry} value={entry}>
-                        {entry}
-                      </option>
-                    ))}
+                    <option>Food</option>
+                    <option>Drinks</option>
+                    <option>Cleaning</option>
+                    <option>Household</option>
+                    <option>Toiletries</option>
+                    <option>Other</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-[#33415c]">
+                <label className="mb-3 block text-sm font-medium text-slate-700">
                   Store
                 </label>
                 <select
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                  className="h-13 w-full rounded-2xl border border-[#d8dfea] bg-[#f9fbff] px-4 py-3 text-base outline-none transition focus:border-[#315efb]"
+                  value={selectedStoreId}
+                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-xl text-[#0b2463] outline-none transition focus:border-[#0b2463]/30 focus:bg-white"
                 >
                   <option value="">No store selected</option>
                   {stores.map((store) => (
@@ -335,50 +397,46 @@ export default function GroceryPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex h-13 w-full items-center justify-center rounded-2xl bg-[#071b52] px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#0a246b] disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-[#0b2463] px-5 py-4 text-lg font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? 'Adding...' : 'Add item'}
+                {saving ? "Saving..." : "Add item"}
               </button>
-
-              {message && (
-                <p className="text-sm text-[#5d6d92]">
-                  {message}
-                </p>
-              )}
             </form>
           </div>
 
-          <div className="rounded-[24px] border border-[#d9dfeb] bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-2xl font-bold text-[#0b1742]">Your items</h2>
+          <div className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-sm">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-3xl font-semibold">Your items</h2>
+              </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={() => setFilter('all')}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                    filter === 'all'
-                      ? 'bg-[#071b52] text-white'
-                      : 'border border-[#d8dfea] bg-white text-[#0d1b4c]'
+                  onClick={() => setFilter("all")}
+                  className={`rounded-2xl px-6 py-3 text-lg font-semibold transition ${
+                    filter === "all"
+                      ? "bg-[#0b2463] text-white"
+                      : "border border-slate-200 bg-white text-[#0b2463]"
                   }`}
                 >
                   All
                 </button>
                 <button
-                  onClick={() => setFilter('pending')}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                    filter === 'pending'
-                      ? 'bg-[#071b52] text-white'
-                      : 'border border-[#d8dfea] bg-white text-[#0d1b4c]'
+                  onClick={() => setFilter("pending")}
+                  className={`rounded-2xl px-6 py-3 text-lg font-semibold transition ${
+                    filter === "pending"
+                      ? "bg-[#0b2463] text-white"
+                      : "border border-slate-200 bg-white text-[#0b2463]"
                   }`}
                 >
                   Pending
                 </button>
                 <button
-                  onClick={() => setFilter('completed')}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                    filter === 'completed'
-                      ? 'bg-[#071b52] text-white'
-                      : 'border border-[#d8dfea] bg-white text-[#0d1b4c]'
+                  onClick={() => setFilter("completed")}
+                  className={`rounded-2xl px-6 py-3 text-lg font-semibold transition ${
+                    filter === "completed"
+                      ? "bg-[#0b2463] text-white"
+                      : "border border-slate-200 bg-white text-[#0b2463]"
                   }`}
                 >
                   Completed
@@ -386,90 +444,96 @@ export default function GroceryPage() {
               </div>
             </div>
 
-            <div className="mb-6 rounded-[22px] border border-[#d8dfea] bg-[#f6f8fc] p-5">
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-lg font-bold text-[#0b1742]">Shopping progress</h3>
-                <span className="text-lg font-bold text-[#0b1742]">{stats.progress}%</span>
+            <div className="mb-6 rounded-[28px] border border-slate-200 bg-[#f7f9fc] p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-2xl font-semibold">Shopping progress</h3>
+                <span className="text-2xl font-semibold">{stats.progress}%</span>
               </div>
 
-              <div className="mt-4 h-4 w-full overflow-hidden rounded-full bg-[#dde4f0]">
+              <div className="h-5 overflow-hidden rounded-full bg-slate-200">
                 <div
-                  className="h-full rounded-full bg-[#071b52] transition-all"
+                  className="h-full rounded-full bg-[#0b2463]"
                   style={{ width: `${stats.progress}%` }}
                 />
               </div>
             </div>
 
-            {loading ? (
-              <p className="text-sm text-[#5d6d92]">Loading items...</p>
-            ) : filteredItems.length === 0 ? (
-              <div className="rounded-[22px] border border-dashed border-[#d8dfea] bg-[#fbfcff] p-8 text-center text-sm text-[#6b7a99]">
-                No grocery items found for this filter.
+            {filteredItems.length === 0 ? (
+              <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center">
+                <Package className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                <h3 className="text-xl font-semibold">No items found</h3>
+                <p className="mt-2 text-slate-500">
+                  Add a new item or change the selected filter.
+                </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {filteredItems.map((item) => (
                   <div
                     key={item.id}
-                    className={`rounded-[22px] border p-4 shadow-sm transition sm:p-5 ${
-                      item.completed
-                        ? 'border-[#d9dfeb] bg-[#f8fbff]'
-                        : 'border-[#d9dfeb] bg-white'
-                    }`}
+                    className="rounded-[28px] border border-slate-200 bg-[#fafbfd] p-6"
                   >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3
-                            className={`text-lg font-semibold ${
-                              item.completed
-                                ? 'text-[#7b88a8] line-through'
-                                : 'text-[#0b1742]'
-                            }`}
-                          >
-                            {item.name}
-                          </h3>
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="mb-4 flex flex-wrap items-center gap-3">
+                          <h3 className="text-2xl font-semibold">{item.name}</h3>
 
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              item.completed
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-amber-100 text-amber-700'
+                            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
+                              item.status === "completed"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-amber-100 text-amber-700"
                             }`}
                           >
-                            {item.completed ? 'Completed' : 'Pending'}
+                            {item.status === "completed" ? "Completed" : "Pending"}
                           </span>
+
+                          {item.auto_generated && (
+                            <span className="rounded-full bg-slate-100 px-4 py-1.5 text-sm font-medium text-slate-600">
+                              Auto-added
+                            </span>
+                          )}
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-2 text-sm text-[#5d6d92]">
-                          <span className="rounded-full bg-[#eef3fb] px-3 py-1">
-                            Qty: {item.quantity ?? 1}
+                        <div className="flex flex-wrap gap-3 text-lg text-slate-600">
+                          <span className="rounded-full bg-slate-100 px-4 py-2">
+                            Qty: {item.quantity}
                           </span>
-                          <span className="rounded-full bg-[#eef3fb] px-3 py-1">
-                            {item.category || 'Other'}
+
+                          <span className="rounded-full bg-slate-100 px-4 py-2">
+                            {item.category || "Other"}
                           </span>
-                          <span className="rounded-full bg-[#eef3fb] px-3 py-1">
-                            {item.store_name || 'No store'}
+
+                          <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2">
+                            <StoreIcon className="h-4 w-4" />
+                            {getStoreName(item.store_id)}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleToggleComplete(item.id, item.completed)}
-                          className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                            item.completed
-                              ? 'border border-[#d8dfea] bg-white text-[#0d1b4c]'
-                              : 'bg-[#071b52] text-white hover:bg-[#0a246b]'
-                          }`}
-                        >
-                          {item.completed ? 'Mark pending' : 'Mark done'}
-                        </button>
+                      <div className="flex flex-wrap gap-3">
+                        {item.status === "pending" ? (
+                          <button
+                            onClick={() => handleMarkDone(item.id)}
+                            className="inline-flex items-center gap-2 rounded-2xl bg-[#0b2463] px-6 py-3 text-lg font-semibold text-white transition hover:opacity-95"
+                          >
+                            <CheckCircle2 className="h-5 w-5" />
+                            Mark done
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleMarkPending(item.id)}
+                            className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-lg font-semibold text-[#0b2463] transition hover:bg-slate-50"
+                          >
+                            Mark pending
+                          </button>
+                        )}
 
                         <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-2xl border border-[#f0c9c9] bg-white px-4 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f5]"
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-white px-6 py-3 text-lg font-semibold text-red-600 transition hover:bg-red-50"
                         >
+                          <Trash2 className="h-5 w-5" />
                           Delete
                         </button>
                       </div>
@@ -479,8 +543,8 @@ export default function GroceryPage() {
               </div>
             )}
           </div>
-        </section>
+        </div>
       </div>
     </div>
-  )
+  );
 }
