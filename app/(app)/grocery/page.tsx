@@ -11,6 +11,8 @@ import {
   Store,
   Trash2,
   Sparkles,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 type GroceryItem = {
@@ -57,6 +59,7 @@ export default function GroceryPage() {
 
   const [selectedStore, setSelectedStore] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [shoppingMode, setShoppingMode] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -75,8 +78,8 @@ export default function GroceryPage() {
       if (itemsError) throw itemsError;
       if (storesError) throw storesError;
 
-      setItems(itemsData || []);
-      setStores(storesData || []);
+      setItems((itemsData as GroceryItem[]) || []);
+      setStores((storesData as StoreType[]) || []);
     } catch (error) {
       console.error("Error fetching grocery data:", error);
     } finally {
@@ -103,7 +106,7 @@ export default function GroceryPage() {
 
       if (error) throw error;
 
-      setItems((prev) => [data, ...prev]);
+      setItems((prev) => [data as GroceryItem, ...prev]);
       setName("");
       setCategory("Other");
       setStoreId("");
@@ -122,9 +125,7 @@ export default function GroceryPage() {
       if (error) throw error;
 
       setItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id ? { ...i, completed: !item.completed } : i
-        )
+        prev.map((i) => (i.id === item.id ? { ...i, completed: !item.completed } : i))
       );
     } catch (error) {
       console.error("Error toggling item:", error);
@@ -197,24 +198,29 @@ export default function GroceryPage() {
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchesStore =
-        selectedStore === "all" ? true : item.store_id === selectedStore;
+      const matchesStore = selectedStore === "all" ? true : item.store_id === selectedStore;
 
       const matchesStatus =
         selectedStatus === "all"
           ? true
           : selectedStatus === "pending"
-          ? !item.completed
-          : !!item.completed;
+            ? !item.completed
+            : !!item.completed;
 
       return matchesStore && matchesStatus;
     });
   }, [items, selectedStore, selectedStatus]);
 
   const pendingCount = items.filter((item) => !item.completed).length;
+  const completedCount = items.filter((item) => item.completed).length;
+
+  const visibleItems = useMemo(() => {
+    if (!shoppingMode) return filteredItems;
+    return filteredItems.filter((item) => !item.completed);
+  }, [filteredItems, shoppingMode]);
 
   return (
-    <main className="min-h-screen bg-[#0b1020] text-white">
+    <main className="min-h-screen text-white">
       <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
         <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.16),transparent_30%)]" />
@@ -229,82 +235,114 @@ export default function GroceryPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
-              Add items manually, assign categories and stores, and mark everything as completed as
-              you shop.
+              Add items manually, assign categories and stores, filter your list, and use shopping
+              mode for a cleaner in-store experience.
             </p>
 
-            <div className="mt-5 inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
-              Pending items: <span className="ml-2 font-semibold text-white">{pendingCount}</span>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+                Pending:
+                <span className="ml-2 font-semibold text-white">{pendingCount}</span>
+              </div>
+
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+                Completed:
+                <span className="ml-2 font-semibold text-white">{completedCount}</span>
+              </div>
+
+              <button
+                onClick={() => setShoppingMode((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  shoppingMode
+                    ? "bg-white text-[#0b1020]"
+                    : "border border-white/10 bg-white/10 text-white"
+                }`}
+              >
+                {shoppingMode ? <EyeOff size={16} /> : <Eye size={16} />}
+                {shoppingMode ? "Exit Shopping Mode" : "Shopping Mode"}
+              </button>
             </div>
           </div>
         </section>
 
         <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold">Add new item</h2>
-              <p className="text-sm text-white/60">Quick manual entry</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm text-white/70">Item name</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Milk"
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
-                />
+          {!shoppingMode && (
+            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold">Add new item</h2>
+                <p className="text-sm text-white/60">Quick manual entry</p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-white/70">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat} className="text-black">
-                      {cat}
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm text-white/70">Item name</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Milk"
+                    className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-white/70">Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat} className="text-black">
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-white/70">Store</label>
+                  <select
+                    value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                  >
+                    <option value="" className="text-black">
+                      No store
                     </option>
-                  ))}
-                </select>
-              </div>
+                    {stores.map((store) => (
+                      <option key={store.id} value={store.id} className="text-black">
+                        {store.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-white/70">Store</label>
-                <select
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                <button
+                  onClick={addItem}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01]"
                 >
-                  <option value="" className="text-black">
-                    No store
-                  </option>
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id} className="text-black">
-                      {store.name}
-                    </option>
-                  ))}
-                </select>
+                  <Plus size={16} />
+                  Add item
+                </button>
               </div>
-
-              <button
-                onClick={addItem}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01]"
-              >
-                <Plus size={16} />
-                Add item
-              </button>
             </div>
-          </div>
+          )}
 
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+          <div
+            className={`rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl ${
+              shoppingMode ? "xl:col-span-2" : ""
+            }`}
+          >
             <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Your items</h2>
-                <p className="text-sm text-white/60">Filter by store or status</p>
+                <h2 className="text-lg font-semibold">
+                  {shoppingMode ? "Shopping Mode" : "Your items"}
+                </h2>
+                <p className="text-sm text-white/60">
+                  {shoppingMode
+                    ? "Focused checklist view for shopping"
+                    : "Filter by store or status"}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -349,21 +387,23 @@ export default function GroceryPage() {
 
             {loading ? (
               <p className="text-sm text-white/60">Loading grocery items...</p>
-            ) : filteredItems.length === 0 ? (
+            ) : visibleItems.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
                 No items found.
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredItems.map((item) => {
+                {visibleItems.map((item) => {
                   const isEditing = editingId === item.id;
 
                   return (
                     <div
                       key={item.id}
-                      className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4"
+                      className={`rounded-[22px] border border-white/10 bg-white/[0.04] p-4 ${
+                        shoppingMode ? "sm:p-5" : ""
+                      }`}
                     >
-                      {isEditing ? (
+                      {isEditing && !shoppingMode ? (
                         <div className="space-y-3">
                           <input
                             value={editName}
@@ -420,15 +460,29 @@ export default function GroceryPage() {
                           <div className="flex min-w-0 items-start gap-3">
                             <button
                               onClick={() => toggleCompleted(item)}
-                              className="mt-0.5 rounded-full border border-white/15 bg-white/10 p-2 text-white/80 transition hover:bg-white/15"
+                              className={`rounded-full border border-white/15 transition ${
+                                shoppingMode
+                                  ? "mt-0 bg-white/10 p-3 text-white hover:bg-white/15"
+                                  : "mt-0.5 bg-white/10 p-2 text-white/80 hover:bg-white/15"
+                              }`}
                             >
-                              {item.completed ? <Check size={16} /> : <Circle size={16} />}
+                              {item.completed ? (
+                                <Check size={shoppingMode ? 20 : 16} />
+                              ) : (
+                                <Circle size={shoppingMode ? 20 : 16} />
+                              )}
                             </button>
 
                             <div className="min-w-0">
                               <p
-                                className={`truncate text-sm font-medium ${
-                                  item.completed ? "text-white/45 line-through" : "text-white"
+                                className={`truncate font-medium ${
+                                  shoppingMode
+                                    ? item.completed
+                                      ? "text-base text-white/40 line-through sm:text-lg"
+                                      : "text-base text-white sm:text-lg"
+                                    : item.completed
+                                      ? "text-sm text-white/45 line-through"
+                                      : "text-sm text-white"
                                 }`}
                               >
                                 {item.name}
@@ -446,21 +500,23 @@ export default function GroceryPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 self-end sm:self-auto">
-                            <button
-                              onClick={() => startEdit(item)}
-                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-white/15"
-                            >
-                              <Pencil size={16} />
-                            </button>
+                          {!shoppingMode && (
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                              <button
+                                onClick={() => startEdit(item)}
+                                className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-white/15"
+                              >
+                                <Pencil size={16} />
+                              </button>
 
-                            <button
-                              onClick={() => deleteItem(item.id)}
-                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-red-500/20 hover:text-red-300"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                              <button
+                                onClick={() => deleteItem(item.id)}
+                                className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-red-500/20 hover:text-red-300"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
