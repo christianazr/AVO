@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Mail, Lock, ArrowRight, ShoppingBag, Sparkles, User } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  ArrowRight,
+  ShoppingBag,
+  Sparkles,
+  User,
+} from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,42 +20,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pageReady, setPageReady] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    async function bootstrap() {
+    async function checkSession() {
       try {
         const {
           data: { session },
-          error,
         } = await supabase.auth.getSession();
 
-        if (error) {
-          console.error("Session check error:", error);
-        }
-
-        if (!mounted) return;
+        if (!active) return;
 
         if (session) {
           router.replace("/dashboard");
           return;
         }
 
-        setPageReady(true);
+        setChecking(false);
       } catch (err) {
-        console.error("Bootstrap error:", err);
-        if (mounted) setPageReady(true);
+        console.error("Login session check failed:", err);
+        if (active) setChecking(false);
       }
     }
 
-    void bootstrap();
+    void checkSession();
 
     return () => {
-      mounted = false;
+      active = false;
     };
   }, [router]);
 
@@ -68,7 +70,6 @@ export default function LoginPage() {
         if (error) throw error;
 
         router.replace("/dashboard");
-        router.refresh();
         return;
       }
 
@@ -95,7 +96,7 @@ export default function LoginPage() {
     }
   }
 
-  if (!pageReady) {
+  if (checking) {
     return (
       <div className="min-h-screen bg-black text-white">
         <div className="relative mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
