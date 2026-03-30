@@ -141,12 +141,12 @@ export default function GroceryPage() {
 
     const { error } = await supabase.from('grocery_items').insert(payload)
 
-    if (error) {
-      console.error(error)
-      setMessage('Failed to add item.')
-      setSaving(false)
-      return
-    }
+   if (error) {
+  console.error('Insert grocery item error:', error)
+  setMessage(error.message || 'Failed to add item.')
+  setSaving(false)
+  return
+}
 
     resetForm()
     await loadData()
