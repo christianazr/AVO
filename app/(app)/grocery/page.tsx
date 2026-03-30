@@ -21,6 +21,7 @@ type GroceryItem = {
   category: string | null;
   completed: boolean | null;
   store_id: string | null;
+  user_id?: string | null;
   created_at?: string;
 };
 
@@ -75,6 +76,10 @@ function GroceryPageContent() {
   const [category, setCategory] = useState("Other");
   const [storeId, setStoreId] = useState("");
 
+  const [adding, setAdding] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState("Other");
@@ -105,6 +110,7 @@ function GroceryPageContent() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setErrorMessage("");
 
       const [{ data: itemsData, error: itemsError }, { data: storesData, error: storesError }] =
         await Promise.all([
@@ -117,43 +123,84 @@ function GroceryPageContent() {
 
       setItems((itemsData as GroceryItem[]) || []);
       setStores((storesData as StoreType[]) || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching grocery data:", error);
+      setErrorMessage(error?.message || "Failed to load grocery data.");
     } finally {
       setLoading(false);
     }
   };
 
   const addItem = async () => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setErrorMessage("Please enter an item name.");
+      setSuccessMessage("");
+      return;
+    }
 
     try {
+      setAdding(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        throw new Error("You must be logged in to add items.");
+      }
+
+      const payload = {
+        name: name.trim(),
+        category,
+        store_id: storeId || null,
+        completed: false,
+        user_id: user.id,
+      };
+
+      console.log("Adding grocery item with payload:", payload);
+
       const { data, error } = await supabase
         .from("grocery_items")
-        .insert([
-          {
-            name: name.trim(),
-            category,
-            store_id: storeId || null,
-            completed: false,
-          },
-        ])
+        .insert([payload])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
 
-      setItems((prev) => [data as GroceryItem, ...prev]);
+      if (data) {
+        setItems((prev) => [data as GroceryItem, ...prev]);
+      } else {
+        await fetchData();
+      }
+
       setName("");
       setCategory("Other");
       setStoreId("");
-    } catch (error) {
+      setSuccessMessage("Item added successfully.");
+    } catch (error: any) {
       console.error("Error adding item:", error);
+      setSuccessMessage("");
+      setErrorMessage(error?.message || "Failed to add item.");
+    } finally {
+      setAdding(false);
     }
   };
 
   const toggleCompleted = async (item: GroceryItem) => {
     try {
+      setErrorMessage("");
+      setSuccessMessage("");
+
       const { error } = await supabase
         .from("grocery_items")
         .update({ completed: !item.completed })
@@ -164,19 +211,25 @@ function GroceryPageContent() {
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, completed: !item.completed } : i))
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling item:", error);
+      setErrorMessage(error?.message || "Failed to update item.");
     }
   };
 
   const deleteItem = async (id: string) => {
     try {
+      setErrorMessage("");
+      setSuccessMessage("");
+
       const { error } = await supabase.from("grocery_items").delete().eq("id", id);
+
       if (error) throw error;
 
       setItems((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting item:", error);
+      setErrorMessage(error?.message || "Failed to delete item.");
     }
   };
 
@@ -185,12 +238,20 @@ function GroceryPageContent() {
     setEditName(item.name);
     setEditCategory(item.category || "Other");
     setEditStoreId(item.store_id || "");
+    setErrorMessage("");
+    setSuccessMessage("");
   };
 
   const saveEdit = async () => {
-    if (!editingId || !editName.trim()) return;
+    if (!editingId || !editName.trim()) {
+      setErrorMessage("Please enter an item name.");
+      return;
+    }
 
     try {
+      setErrorMessage("");
+      setSuccessMessage("");
+
       const { error } = await supabase
         .from("grocery_items")
         .update({
@@ -216,8 +277,10 @@ function GroceryPageContent() {
       );
 
       cancelEdit();
-    } catch (error) {
+      setSuccessMessage("Item updated successfully.");
+    } catch (error: any) {
       console.error("Error saving item:", error);
+      setErrorMessage(error?.message || "Failed to save item.");
     }
   };
 
@@ -272,6 +335,11 @@ function GroceryPageContent() {
     if (!shoppingMode) return filteredItems;
     return filteredItems.filter((item) => !item.completed);
   }, [filteredItems, shoppingMode]);
+
+  const handleAddItemSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    await addItem();
+  };
 
   return (
     <main className="min-h-screen text-white">
@@ -337,7 +405,7 @@ function GroceryPageContent() {
                 <p className="text-sm text-white/60">Quick manual entry</p>
               </div>
 
-              <div className="space-y-4">
+              <form onSubmit={handleAddItemSubmit} className="space-y-4">
                 <div>
                   <label className="mb-2 block text-sm text-white/70">Item name</label>
                   <input
@@ -382,13 +450,22 @@ function GroceryPageContent() {
                 </div>
 
                 <button
-                  onClick={addItem}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01]"
+                  type="submit"
+                  disabled={adding}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Plus size={16} />
-                  Add item
+                  {adding ? "Adding..." : "Add item"}
                 </button>
-              </div>
+
+                {errorMessage ? (
+                  <p className="text-sm text-red-300">{errorMessage}</p>
+                ) : null}
+
+                {successMessage ? (
+                  <p className="text-sm text-emerald-300">{successMessage}</p>
+                ) : null}
+              </form>
             </div>
           )}
 
