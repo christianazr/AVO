@@ -11,7 +11,8 @@ import {
   Store,
   Trash2,
   X,
-  CalendarClock,
+  BatteryLow,
+  Droplets,
 } from "lucide-react";
 
 type StoreType = {
@@ -24,8 +25,9 @@ type AutoConsumptionRule = {
   product_name: string;
   category: string | null;
   store_id: string | null;
-  frequency_days: number | null;
-  last_generated_at: string | null;
+  current_stock: number | null;
+  threshold_percent: number | null;
+  last_triggered_at: string | null;
   created_at?: string;
 };
 
@@ -52,13 +54,15 @@ export default function AutoConsumptionPage() {
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("Other");
   const [storeId, setStoreId] = useState("");
-  const [frequencyDays, setFrequencyDays] = useState("7");
+  const [currentStock, setCurrentStock] = useState("100");
+  const [thresholdPercent, setThresholdPercent] = useState("25");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editProductName, setEditProductName] = useState("");
   const [editCategory, setEditCategory] = useState("Other");
   const [editStoreId, setEditStoreId] = useState("");
-  const [editFrequencyDays, setEditFrequencyDays] = useState("7");
+  const [editCurrentStock, setEditCurrentStock] = useState("100");
+  const [editThresholdPercent, setEditThresholdPercent] = useState("25");
 
   useEffect(() => {
     fetchData();
@@ -70,7 +74,10 @@ export default function AutoConsumptionPage() {
 
       const [{ data: rulesData, error: rulesError }, { data: storesData, error: storesError }] =
         await Promise.all([
-          supabase.from("auto_consumption_rules").select("*").order("created_at", { ascending: false }),
+          supabase
+            .from("auto_consumption_rules")
+            .select("*")
+            .order("created_at", { ascending: false }),
           supabase.from("stores").select("*").order("name", { ascending: true }),
         ]);
 
@@ -86,6 +93,12 @@ export default function AutoConsumptionPage() {
     }
   };
 
+  const clampPercent = (value: string) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return 0;
+    return Math.max(0, Math.min(100, num));
+  };
+
   const addRule = async () => {
     if (!productName.trim()) return;
 
@@ -96,8 +109,9 @@ export default function AutoConsumptionPage() {
         product_name: productName.trim(),
         category,
         store_id: storeId || null,
-        frequency_days: Number(frequencyDays) || 7,
-        last_generated_at: null,
+        current_stock: clampPercent(currentStock),
+        threshold_percent: clampPercent(thresholdPercent),
+        last_triggered_at: null,
       };
 
       const { data, error } = await supabase
@@ -112,9 +126,10 @@ export default function AutoConsumptionPage() {
       setProductName("");
       setCategory("Other");
       setStoreId("");
-      setFrequencyDays("7");
+      setCurrentStock("100");
+      setThresholdPercent("25");
     } catch (error) {
-      console.error("Error adding auto consumption rule:", error);
+      console.error("Error adding auto-consumption rule:", error);
     } finally {
       setSaving(false);
     }
@@ -136,7 +151,8 @@ export default function AutoConsumptionPage() {
     setEditProductName(rule.product_name);
     setEditCategory(rule.category || "Other");
     setEditStoreId(rule.store_id || "");
-    setEditFrequencyDays(String(rule.frequency_days || 7));
+    setEditCurrentStock(String(rule.current_stock ?? 100));
+    setEditThresholdPercent(String(rule.threshold_percent ?? 25));
   };
 
   const cancelEdit = () => {
@@ -144,7 +160,8 @@ export default function AutoConsumptionPage() {
     setEditProductName("");
     setEditCategory("Other");
     setEditStoreId("");
-    setEditFrequencyDays("7");
+    setEditCurrentStock("100");
+    setEditThresholdPercent("25");
   };
 
   const saveEdit = async () => {
@@ -155,7 +172,8 @@ export default function AutoConsumptionPage() {
         product_name: editProductName.trim(),
         category: editCategory,
         store_id: editStoreId || null,
-        frequency_days: Number(editFrequencyDays) || 7,
+        current_stock: clampPercent(editCurrentStock),
+        threshold_percent: clampPercent(editThresholdPercent),
       };
 
       const { error } = await supabase
@@ -173,7 +191,8 @@ export default function AutoConsumptionPage() {
                 product_name: editProductName.trim(),
                 category: editCategory,
                 store_id: editStoreId || null,
-                frequency_days: Number(editFrequencyDays) || 7,
+                current_stock: clampPercent(editCurrentStock),
+                threshold_percent: clampPercent(editThresholdPercent),
               }
             : rule
         )
@@ -185,7 +204,36 @@ export default function AutoConsumptionPage() {
     }
   };
 
-  const generateNow = async (rule: AutoConsumptionRule) => {
+  const updateCurrentStock = async (rule: AutoConsumptionRule, nextStock: number) => {
+    try {
+      const clampedStock = Math.max(0, Math.min(100, nextStock));
+
+      const { error } = await supabase
+        .from("auto_consumption_rules")
+        .update({ current_stock: clampedStock })
+        .eq("id", rule.id);
+
+      if (error) throw error;
+
+      setRules((prev) =>
+        prev.map((item) =>
+          item.id === rule.id ? { ...item, current_stock: clampedStock } : item
+        )
+      );
+    } catch (error) {
+      console.error("Error updating stock percentage:", error);
+    }
+  };
+
+  const generateIfBelowThreshold = async (rule: AutoConsumptionRule) => {
+    const current = rule.current_stock ?? 100;
+    const threshold = rule.threshold_percent ?? 25;
+
+    if (current > threshold) {
+      alert(`This item is still above the threshold (${current}% > ${threshold}%).`);
+      return;
+    }
+
     try {
       const insertPayload = {
         name: rule.product_name,
@@ -201,14 +249,14 @@ export default function AutoConsumptionPage() {
 
       const { error: updateError } = await supabase
         .from("auto_consumption_rules")
-        .update({ last_generated_at: nowIso })
+        .update({ last_triggered_at: nowIso })
         .eq("id", rule.id);
 
       if (updateError) throw updateError;
 
       setRules((prev) =>
         prev.map((item) =>
-          item.id === rule.id ? { ...item, last_generated_at: nowIso } : item
+          item.id === rule.id ? { ...item, last_triggered_at: nowIso } : item
         )
       );
     } catch (error) {
@@ -221,8 +269,8 @@ export default function AutoConsumptionPage() {
     return stores.find((store) => store.id === value)?.name || "Unknown store";
   };
 
-  const formatLastGenerated = (value: string | null) => {
-    if (!value) return "Never generated";
+  const formatLastTriggered = (value: string | null) => {
+    if (!value) return "Never triggered";
     return new Date(value).toLocaleDateString(undefined, {
       day: "2-digit",
       month: "short",
@@ -246,8 +294,8 @@ export default function AutoConsumptionPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
-              Create recurring product rules and generate grocery items faster with category and
-              store already assigned.
+              Create product rules using remaining stock percentage instead of days, and add items
+              to Grocery when they fall below your threshold.
             </p>
           </div>
         </section>
@@ -256,7 +304,7 @@ export default function AutoConsumptionPage() {
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Add new rule</h2>
-              <p className="text-sm text-white/60">Create a recurring grocery pattern</p>
+              <p className="text-sm text-white/60">Trigger by stock percentage</p>
             </div>
 
             <div className="space-y-4">
@@ -301,15 +349,33 @@ export default function AutoConsumptionPage() {
                     </option>
                   ))}
                 </select>
+                {stores.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-300">
+                    No stores found yet. Create one in Stores if you want to assign a shop here.
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Frequency (days)</label>
+                <label className="mb-2 block text-sm text-white/70">Current stock (%)</label>
                 <input
                   type="number"
-                  min="1"
-                  value={frequencyDays}
-                  onChange={(e) => setFrequencyDays(e.target.value)}
+                  min="0"
+                  max="100"
+                  value={currentStock}
+                  onChange={(e) => setCurrentStock(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm text-white/70">Trigger threshold (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={thresholdPercent}
+                  onChange={(e) => setThresholdPercent(e.target.value)}
                   className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
                 />
               </div>
@@ -328,7 +394,9 @@ export default function AutoConsumptionPage() {
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Your auto-consumption rules</h2>
-              <p className="text-sm text-white/60">Generate products into grocery list instantly</p>
+              <p className="text-sm text-white/60">
+                Items are ready to add when stock goes below threshold
+              </p>
             </div>
 
             {loading ? (
@@ -341,6 +409,9 @@ export default function AutoConsumptionPage() {
               <div className="space-y-3">
                 {rules.map((rule) => {
                   const isEditing = editingId === rule.id;
+                  const current = rule.current_stock ?? 100;
+                  const threshold = rule.threshold_percent ?? 25;
+                  const ready = current <= threshold;
 
                   return (
                     <div
@@ -384,13 +455,24 @@ export default function AutoConsumptionPage() {
                             </select>
                           </div>
 
-                          <input
-                            type="number"
-                            min="1"
-                            value={editFrequencyDays}
-                            onChange={(e) => setEditFrequencyDays(e.target.value)}
-                            className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                          />
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editCurrentStock}
+                              onChange={(e) => setEditCurrentStock(e.target.value)}
+                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editThresholdPercent}
+                              onChange={(e) => setEditThresholdPercent(e.target.value)}
+                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                            />
+                          </div>
 
                           <div className="flex flex-col gap-2 sm:flex-row">
                             <button
@@ -427,23 +509,47 @@ export default function AutoConsumptionPage() {
                               </span>
 
                               <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white/70">
-                                <CalendarClock size={12} />
-                                Every {rule.frequency_days || 7} days
+                                <Droplets size={12} />
+                                Stock {current}%
+                              </span>
+
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white/70">
+                                <BatteryLow size={12} />
+                                Trigger at {threshold}%
                               </span>
                             </div>
 
                             <p className="mt-3 text-xs text-white/45">
-                              Last generated: {formatLastGenerated(rule.last_generated_at)}
+                              Last triggered: {formatLastTriggered(rule.last_triggered_at)}
                             </p>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => updateCurrentStock(rule, current - 10)}
+                                className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/15"
+                              >
+                                -10%
+                              </button>
+                              <button
+                                onClick={() => updateCurrentStock(rule, current + 10)}
+                                className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/15"
+                              >
+                                +10%
+                              </button>
+                            </div>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
                             <button
-                              onClick={() => generateNow(rule)}
-                              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01]"
+                              onClick={() => generateIfBelowThreshold(rule)}
+                              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                                ready
+                                  ? "bg-white text-[#0b1020] hover:scale-[1.01]"
+                                  : "border border-white/10 bg-white/10 text-white/60"
+                              }`}
                             >
                               <RotateCw size={15} />
-                              Generate now
+                              {ready ? "Add to grocery" : "Above threshold"}
                             </button>
 
                             <button
