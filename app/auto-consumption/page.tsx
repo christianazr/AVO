@@ -43,6 +43,17 @@ type GroceryItem = {
   auto_generated?: boolean | null;
 };
 
+type AutoAddResult = {
+  inserted: boolean;
+  reason:
+    | "inserted"
+    | "already_exists"
+    | "above_threshold"
+    | "auto_add_disabled"
+    | "invalid_target"
+    | "error";
+};
+
 export default function AutoConsumptionPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -79,21 +90,28 @@ export default function AutoConsumptionPage() {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
 
       if (!session) {
         setError("Auth session missing!");
-        setLoading(false);
         return;
       }
 
       const uid = session.user.id;
       setUserId(uid);
 
-      await Promise.all([loadStores(uid), loadTrackedItems(uid), loadGroceryItems(uid)]);
+      await Promise.all([
+        loadStores(uid),
+        loadTrackedItems(uid),
+        loadGroceryItems(uid),
+      ]);
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Failed to load auto-consumption page.");
@@ -196,19 +214,40 @@ export default function AutoConsumptionPage() {
     };
   }
 
-  async function maybeAutoAddToGroceryList(item: TrackedItem) {
+  async function maybeAutoAddToGroceryList(
+    item: TrackedItem
+  ): Promise<AutoAddResult> {
     try {
-      if (!item.auto_add_enabled) return;
+      if (!item.auto_add_enabled) {
+        console.log("Auto add disabled for:", item.item_name);
+        return { inserted: false, reason: "auto_add_disabled" };
+      }
 
       const target = Number(item.target_stock || 0);
       const current = Number(item.current_stock || 0);
       const threshold = Number(item.threshold_percent || 0);
 
-      if (target <= 0) return;
+      if (target <= 0) {
+        console.log("Invalid target stock for:", item.item_name);
+        return { inserted: false, reason: "invalid_target" };
+      }
 
       const stockPercent = (current / target) * 100;
 
-      if (stockPercent > threshold) return;
+      console.log("Auto-add check", {
+        item: item.item_name,
+        current,
+        target,
+        threshold,
+        stockPercent,
+        store_id: item.store_id,
+        user_id: item.user_id,
+      });
+
+      if (stockPercent > threshold) {
+        console.log("Above threshold, not adding:", item.item_name);
+        return { inserted: false, reason: "above_threshold" };
+      }
 
       const suggestedQty = Math.max(target - current, 1);
 
@@ -222,12 +261,16 @@ export default function AutoConsumptionPage() {
         .maybeSingle();
 
       if (existingError && existingError.code !== "PGRST116") {
+        console.error("Error checking existing grocery item:", existingError);
         throw existingError;
       }
 
-      if (existing) return;
+      if (existing) {
+        console.log("Pending grocery item already exists for:", item.item_name);
+        return { inserted: false, reason: "already_exists" };
+      }
 
-      const { error: insertError } = await supabase.from("grocery_items").insert({
+      const insertPayload = {
         user_id: item.user_id,
         name: item.item_name,
         quantity: suggestedQty,
@@ -235,18 +278,38 @@ export default function AutoConsumptionPage() {
         status: "pending",
         source: "auto_consumption",
         auto_generated: true,
-      });
+      };
 
-      if (insertError) throw insertError;
-    } catch (err) {
+      console.log("Inserting grocery item:", insertPayload);
+
+      const { data: insertedRow, error: insertError } = await supabase
+        .from("grocery_items")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Insert grocery item failed:", insertError);
+        throw insertError;
+      }
+
+      console.log("Inserted grocery item successfully:", insertedRow);
+
+      return { inserted: true, reason: "inserted" };
+    } catch (err: any) {
       console.error("Auto-add to grocery list failed:", err);
+      setError(err?.message || "Automatic grocery insert failed.");
+      return { inserted: false, reason: "error" };
     }
   }
 
   async function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!userId) return;
+    if (!userId) {
+      setError("Auth session missing!");
+      return;
+    }
 
     if (!itemName.trim()) {
       setError("Please enter an item name.");
@@ -267,7 +330,11 @@ export default function AutoConsumptionPage() {
       return;
     }
 
-    if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 100) {
+    if (
+      Number.isNaN(parsedThreshold) ||
+      parsedThreshold < 0 ||
+      parsedThreshold > 100
+    ) {
       setError("Threshold must be between 0 and 100.");
       return;
     }
@@ -297,11 +364,23 @@ export default function AutoConsumptionPage() {
 
       const createdItem = data as TrackedItem;
 
-      await maybeAutoAddToGroceryList(createdItem);
+      const autoAddResult = await maybeAutoAddToGroceryList(createdItem);
+
       await Promise.all([loadTrackedItems(userId), loadGroceryItems(userId)]);
 
       clearForm();
-      setMessage("Tracked item added successfully.");
+
+      if (autoAddResult.inserted) {
+        setMessage("Tracked item added and pushed to grocery list.");
+      } else if (autoAddResult.reason === "already_exists") {
+        setMessage("Tracked item added. Grocery item was already pending.");
+      } else if (autoAddResult.reason === "above_threshold") {
+        setMessage(
+          "Tracked item added. Stock is above threshold, so it was not pushed."
+        );
+      } else {
+        setMessage("Tracked item added.");
+      }
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Could not add tracked item.");
@@ -323,7 +402,10 @@ export default function AutoConsumptionPage() {
   }
 
   async function handleSaveEdit(id: string) {
-    if (!userId) return;
+    if (!userId) {
+      setError("Auth session missing!");
+      return;
+    }
 
     if (!editItemName.trim()) {
       setError("Please enter an item name.");
@@ -344,7 +426,11 @@ export default function AutoConsumptionPage() {
       return;
     }
 
-    if (Number.isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 100) {
+    if (
+      Number.isNaN(parsedThreshold) ||
+      parsedThreshold < 0 ||
+      parsedThreshold > 100
+    ) {
       setError("Threshold must be between 0 and 100.");
       return;
     }
@@ -372,11 +458,23 @@ export default function AutoConsumptionPage() {
 
       const updatedItem = data as TrackedItem;
 
-      await maybeAutoAddToGroceryList(updatedItem);
+      const autoAddResult = await maybeAutoAddToGroceryList(updatedItem);
+
       await Promise.all([loadTrackedItems(userId), loadGroceryItems(userId)]);
 
       resetEditForm();
-      setMessage("Tracked item updated successfully.");
+
+      if (autoAddResult.inserted) {
+        setMessage("Tracked item updated and pushed to grocery list.");
+      } else if (autoAddResult.reason === "already_exists") {
+        setMessage("Tracked item updated. Grocery item was already pending.");
+      } else if (autoAddResult.reason === "above_threshold") {
+        setMessage(
+          "Tracked item updated. Stock is above threshold, so it was not pushed."
+        );
+      } else {
+        setMessage("Tracked item updated successfully.");
+      }
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Could not update tracked item.");
@@ -386,9 +484,14 @@ export default function AutoConsumptionPage() {
   }
 
   async function handleDeleteItem(id: string) {
-    if (!userId) return;
+    if (!userId) {
+      setError("Auth session missing!");
+      return;
+    }
 
-    const confirmed = window.confirm("Are you sure you want to delete this tracked item?");
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this tracked item?"
+    );
     if (!confirmed) return;
 
     try {
@@ -404,6 +507,7 @@ export default function AutoConsumptionPage() {
       if (error) throw error;
 
       await loadTrackedItems(userId);
+
       if (editingId === id) resetEditForm();
 
       setMessage("Tracked item deleted successfully.");
@@ -416,7 +520,10 @@ export default function AutoConsumptionPage() {
   }
 
   async function handleManualRefresh() {
-    if (!userId) return;
+    if (!userId) {
+      setError("Auth session missing!");
+      return;
+    }
 
     try {
       setRefreshing(true);
@@ -439,8 +546,9 @@ export default function AutoConsumptionPage() {
       const pct = getStockPercent(item.current_stock, item.target_stock);
       return pct <= item.threshold_percent;
     }).length;
-
-    const autoEnabled = trackedItems.filter((item) => item.auto_add_enabled).length;
+    const autoEnabled = trackedItems.filter(
+      (item) => item.auto_add_enabled
+    ).length;
 
     return {
       total,
@@ -490,7 +598,8 @@ export default function AutoConsumptionPage() {
               Auto-consumption
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-white/60 sm:text-base">
-              Track home stock levels and automatically push low items into your grocery list before you run out.
+              Track home stock levels and automatically push low items into your
+              grocery list before you run out.
             </p>
           </div>
 
@@ -585,7 +694,9 @@ export default function AutoConsumptionPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-2 block text-sm text-white/70">Current stock</label>
+                  <label className="mb-2 block text-sm text-white/70">
+                    Current stock
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -596,7 +707,9 @@ export default function AutoConsumptionPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm text-white/70">Target stock</label>
+                  <label className="mb-2 block text-sm text-white/70">
+                    Target stock
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -608,7 +721,9 @@ export default function AutoConsumptionPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Threshold %</label>
+                <label className="mb-2 block text-sm text-white/70">
+                  Threshold %
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -618,7 +733,8 @@ export default function AutoConsumptionPage() {
                   className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-black/60"
                 />
                 <p className="mt-2 text-xs leading-relaxed text-white/40">
-                  Example: if threshold is 25, the item is auto-added when current stock is 25% or less of target stock.
+                  Example: if threshold is 25, the item is auto-added when current
+                  stock is 25% or less of target stock.
                 </p>
               </div>
 
@@ -670,8 +786,14 @@ export default function AutoConsumptionPage() {
             ) : (
               <div className="space-y-4">
                 {trackedItems.map((item) => {
-                  const stockPercent = getStockPercent(item.current_stock, item.target_stock);
-                  const suggestedPurchase = getSuggestedPurchase(item.current_stock, item.target_stock);
+                  const stockPercent = getStockPercent(
+                    item.current_stock,
+                    item.target_stock
+                  );
+                  const suggestedPurchase = getSuggestedPurchase(
+                    item.current_stock,
+                    item.target_stock
+                  );
                   const status = getStatus(item);
                   const isEditing = editingId === item.id;
 
@@ -731,7 +853,9 @@ export default function AutoConsumptionPage() {
                           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/55">
                             <span>Threshold: {item.threshold_percent}%</span>
                             <span>Suggested purchase: {suggestedPurchase}</span>
-                            <span>Auto add: {item.auto_add_enabled ? "Enabled" : "Disabled"}</span>
+                            <span>
+                              Auto add: {item.auto_add_enabled ? "Enabled" : "Disabled"}
+                            </span>
                             <span>
                               Pending in grocery list:{" "}
                               {groceryItems.some(
@@ -749,7 +873,9 @@ export default function AutoConsumptionPage() {
                         <div className="space-y-4">
                           <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">Item name</label>
+                              <label className="mb-2 block text-sm text-white/70">
+                                Item name
+                              </label>
                               <input
                                 value={editItemName}
                                 onChange={(e) => setEditItemName(e.target.value)}
@@ -758,7 +884,9 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">Store</label>
+                              <label className="mb-2 block text-sm text-white/70">
+                                Store
+                              </label>
                               <select
                                 value={editStoreId}
                                 onChange={(e) => setEditStoreId(e.target.value)}
@@ -776,7 +904,9 @@ export default function AutoConsumptionPage() {
 
                           <div className="grid gap-4 sm:grid-cols-3">
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">Current stock</label>
+                              <label className="mb-2 block text-sm text-white/70">
+                                Current stock
+                              </label>
                               <input
                                 type="number"
                                 min="0"
@@ -787,7 +917,9 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">Target stock</label>
+                              <label className="mb-2 block text-sm text-white/70">
+                                Target stock
+                              </label>
                               <input
                                 type="number"
                                 min="1"
@@ -798,7 +930,9 @@ export default function AutoConsumptionPage() {
                             </div>
 
                             <div>
-                              <label className="mb-2 block text-sm text-white/70">Threshold %</label>
+                              <label className="mb-2 block text-sm text-white/70">
+                                Threshold %
+                              </label>
                               <input
                                 type="number"
                                 min="0"
