@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const storeSummaries = useMemo<StoreSummary[]>(() => {
     const summaries: StoreSummary[] = stores.map((store) => {
       const storeItems = items.filter((item) => item.store_id === store.id);
+
       return {
         id: store.id,
         name: store.name,
@@ -101,6 +102,7 @@ export default function DashboardPage() {
     });
 
     const noStoreItems = items.filter((item) => !item.store_id);
+
     if (noStoreItems.length > 0) {
       summaries.push({
         id: "no-store",
@@ -113,6 +115,14 @@ export default function DashboardPage() {
 
     return summaries.sort((a, b) => b.pending - a.pending || b.total - a.total);
   }, [stores, items]);
+
+  const getStoreHref = (store: StoreSummary) => {
+    if (store.id === "no-store") {
+      return "/grocery?store=no-store";
+    }
+
+    return `/grocery?store=${store.id}`;
+  };
 
   return (
     <main className="min-h-screen text-white">
@@ -165,13 +175,13 @@ export default function DashboardPage() {
             title="Pending"
             value={loading ? "..." : String(stats.pendingItems)}
             icon={<ShoppingCart size={18} />}
-            href="/grocery"
+            href="/grocery?status=pending"
           />
           <StatCard
             title="Completed"
             value={loading ? "..." : String(stats.completedItems)}
             icon={<CheckCircle2 size={18} />}
-            href="/grocery"
+            href="/grocery?status=completed"
           />
           <StatCard
             title="Stores"
@@ -190,7 +200,7 @@ export default function DashboardPage() {
               </div>
 
               <Link
-                href="/grocery"
+                href="/grocery?status=pending"
                 className="text-sm font-medium text-white/80 transition hover:text-white"
               >
                 View all
@@ -280,7 +290,7 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Store summary</h2>
-                <p className="text-sm text-white/60">See where most pending items are grouped</p>
+                <p className="text-sm text-white/60">Tap a store to open Grocery already filtered</p>
               </div>
 
               <Link
@@ -300,9 +310,10 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {storeSummaries.map((store) => (
-                  <div
+                  <Link
                     key={store.id}
-                    className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                    href={getStoreHref(store)}
+                    className="block rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:bg-white/[0.08]"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -328,7 +339,7 @@ export default function DashboardPage() {
                         Done: <span className="font-semibold text-white">{store.completed}</span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
