@@ -1,301 +1,243 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  ArrowLeft,
-  Plus,
-  Star,
-  Trash2,
-  Store,
-  LogOut,
-} from "lucide-react";
+import { Pencil, Plus, Save, Sparkles, Store, Trash2, X } from "lucide-react";
 
-type UserStore = {
+type StoreType = {
   id: string;
-  user_id: string;
   name: string;
-  is_favorite: boolean;
-  created_at: string;
+  created_at?: string;
 };
 
 export default function StoresPage() {
-  const router = useRouter();
-
-  const [userId, setUserId] = useState<string | null>(null);
-  const [stores, setStores] = useState<UserStore[]>([]);
+  const [stores, setStores] = useState<StoreType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [newStore, setNewStore] = useState("");
+
+  const [newStoreName, setNewStoreName] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   useEffect(() => {
-    const loadStores = async () => {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+    fetchStores();
+  }, []);
 
-      if (userError || !user) {
-        router.push("/login");
-        return;
-      }
+  const fetchStores = async () => {
+    try {
+      setLoading(true);
 
-      setUserId(user.id);
-
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("stores")
         .select("*")
-        .eq("user_id", user.id)
         .order("name", { ascending: true });
 
-      setStores(data ?? []);
+      if (error) throw error;
+
+      setStores(data || []);
+    } catch (error) {
+      console.error("Error fetching stores:", error);
+    } finally {
       setLoading(false);
-    };
-
-    loadStores();
-  }, [router]);
-
-  const favoriteCount = useMemo(
-    () => stores.filter((store) => store.is_favorite).length,
-    [stores]
-  );
+    }
+  };
 
   const addStore = async () => {
-    const cleanName = newStore.trim();
-    if (!cleanName || !userId || saving) return;
+    if (!newStoreName.trim()) return;
 
-    const exists = stores.some(
-      (store) => store.name.toLowerCase() === cleanName.toLowerCase()
-    );
-    if (exists) return;
+    try {
+      const { data, error } = await supabase
+        .from("stores")
+        .insert([{ name: newStoreName.trim() }])
+        .select()
+        .single();
 
-    setSaving(true);
+      if (error) throw error;
 
-    const { data, error } = await supabase
-      .from("stores")
-      .insert({
-        user_id: userId,
-        name: cleanName,
-        is_favorite: false,
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
       setStores((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-      setNewStore("");
-    }
-
-    setSaving(false);
-  };
-
-  const toggleFavorite = async (id: string, currentValue: boolean) => {
-    const previousStores = stores;
-    const nextStores = stores.map((store) =>
-      store.id === id ? { ...store, is_favorite: !currentValue } : store
-    );
-
-    setStores(nextStores);
-
-    const { error } = await supabase
-      .from("stores")
-      .update({ is_favorite: !currentValue })
-      .eq("id", id);
-
-    if (error) {
-      setStores(previousStores);
+      setNewStoreName("");
+    } catch (error) {
+      console.error("Error adding store:", error);
     }
   };
 
-  const deleteStore = async (id: string, name: string) => {
-    const isUsed = stores.length > 0;
-    const groceryCheck = await supabase
-      .from("grocery_items")
-      .select("id")
-      .eq("store", name)
-      .limit(1);
+  const startEdit = (store: StoreType) => {
+    setEditingId(store.id);
+    setEditingName(store.name);
+  };
 
-    if ((groceryCheck.data ?? []).length > 0) {
-      alert("This store is being used by grocery items. Please update or delete those items first.");
-      return;
-    }
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingName("");
+  };
 
-    const previousStores = stores;
-    setStores((prev) => prev.filter((store) => store.id !== id));
+  const saveEdit = async () => {
+    if (!editingId || !editingName.trim()) return;
 
-    const { error } = await supabase.from("stores").delete().eq("id", id);
+    try {
+      const { error } = await supabase
+        .from("stores")
+        .update({ name: editingName.trim() })
+        .eq("id", editingId);
 
-    if (error) {
-      setStores(previousStores);
+      if (error) throw error;
+
+      setStores((prev) =>
+        prev
+          .map((store) =>
+            store.id === editingId ? { ...store, name: editingName.trim() } : store
+          )
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      cancelEdit();
+    } catch (error) {
+      console.error("Error updating store:", error);
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
+  const deleteStore = async (id: string) => {
+    try {
+      const { error } = await supabase.from("stores").delete().eq("id", id);
+      if (error) throw error;
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-[#eef3fb]">
-        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-6 sm:px-6 sm:py-8 md:px-8 lg:px-10">
-          <div className="rounded-[28px] border border-[#d9dfeb] bg-white px-8 py-6 shadow-sm">
-            <p className="text-sm text-[#5c677d]">Loading stores...</p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+      setStores((prev) => prev.filter((store) => store.id !== id));
+    } catch (error) {
+      console.error("Error deleting store:", error);
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-[#eef3fb] text-[#0d1730]">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-8 lg:px-10">
-        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-xl border border-[#d8dfeb] bg-white px-4 py-2.5 text-sm font-semibold text-[#0d1730] shadow-sm transition hover:bg-[#f8fbff]"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Link>
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#2f66f5] sm:text-sm">
-                Store management
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl">
-                Manage Stores
-              </h1>
+    <main className="min-h-screen bg-[#0b1020] text-white">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.16),transparent_30%)]" />
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80">
+              <Sparkles size={14} />
+              Store Management
             </div>
-          </div>
 
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <Link
-              href="/grocery"
-              className="rounded-xl border border-[#d8dfeb] bg-white px-4 py-2.5 text-center text-sm font-semibold text-[#0d1730] shadow-sm transition hover:bg-[#f8fbff] sm:text-base"
-            >
-              Open Grocery
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0c1730] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 sm:text-base"
-            >
-              <LogOut className="h-4 w-4" />
-              Log out
-            </button>
-          </div>
-        </header>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Organise your stores
+            </h1>
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-3">
-          <SummaryCard label="Saved stores" value={stores.length} />
-          <SummaryCard label="Favourite stores" value={favoriteCount} />
-          <SummaryCard label="Standard stores" value={stores.length - favoriteCount} />
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
+              Create, rename and delete supermarkets or favourite shopping places to keep your
+              grocery planning structured.
+            </p>
+          </div>
         </section>
 
-        <section className="mb-6 rounded-[28px] border border-[#d8dfeb] bg-white p-5 shadow-sm sm:p-7">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-            <div>
-              <label className="mb-3 block text-base font-medium text-[#25324a] sm:text-lg">
-                Add store
-              </label>
-              <input
-                type="text"
-                value={newStore}
-                onChange={(e) => setNewStore(e.target.value)}
-                placeholder="Example: Tesco, Lidl, Costco"
-                className="h-14 w-full rounded-2xl border border-[#d7deea] bg-[#fbfcfe] px-4 text-base text-[#0d1730] outline-none transition focus:border-[#93b4ff] sm:h-16 sm:px-5 sm:text-lg"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addStore();
-                }}
-              />
+        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Add new store</h2>
+              <p className="text-sm text-white/60">Create a supermarket or shop</p>
             </div>
 
-            <div className="flex items-end">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm text-white/70">Store name</label>
+                <input
+                  value={newStoreName}
+                  onChange={(e) => setNewStoreName(e.target.value)}
+                  placeholder="e.g. Tesco"
+                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+                />
+              </div>
+
               <button
                 onClick={addStore}
-                disabled={saving}
-                className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#0c1730] px-6 text-base font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:h-16 sm:text-lg md:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01]"
               >
-                <Plus className="h-5 w-5" />
-                {saving ? "Adding..." : "Add store"}
+                <Plus size={16} />
+                Add store
               </button>
             </div>
           </div>
-        </section>
 
-        <section className="space-y-4 sm:space-y-5">
-          {stores.length === 0 ? (
-            <div className="rounded-[28px] border border-dashed border-[#d8dfeb] bg-white p-10 text-center shadow-sm sm:p-16">
-              <Store className="mx-auto mb-4 h-12 w-12 text-[#8a94a6]" />
-              <h3 className="text-xl font-semibold text-[#0d1730] sm:text-2xl">
-                No stores yet
-              </h3>
-              <p className="mt-3 text-base text-[#667085] sm:text-lg">
-                Add your supermarkets here and use them in Grocery.
-              </p>
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">All stores</h2>
+              <p className="text-sm text-white/60">Manage your saved list of stores</p>
             </div>
-          ) : (
-            stores.map((store) => (
-              <article
-                key={store.id}
-                className="rounded-[24px] border border-[#d8dfeb] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 sm:rounded-[30px] sm:p-6"
-              >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#f2f5fa] text-[#334155] sm:h-14 sm:w-14">
-                      <Store className="h-5 w-5 sm:h-6 sm:w-6" />
-                    </div>
 
-                    <div className="min-w-0">
-                      <h3 className="truncate text-xl font-semibold text-[#0d1730] sm:text-2xl">
-                        {store.name}
-                      </h3>
-                      <p className="mt-1 text-sm text-[#667085]">
-                        {store.is_favorite ? "Favourite supermarket" : "Standard supermarket"}
-                      </p>
-                    </div>
-                  </div>
+            {loading ? (
+              <p className="text-sm text-white/60">Loading stores...</p>
+            ) : stores.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
+                No stores yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stores.map((store) => {
+                  const isEditing = editingId === store.id;
 
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                    <button
-                      onClick={() => toggleFavorite(store.id, store.is_favorite)}
-                      className="inline-flex h-10 items-center gap-2 rounded-2xl border border-[#d8dfeb] bg-white px-4 text-sm font-medium text-[#0d1730] transition hover:bg-[#f8fbff] sm:h-12 sm:px-5 sm:text-base"
+                  return (
+                    <div
+                      key={store.id}
+                      className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4"
                     >
-                      <Star
-                        className={`h-5 w-5 ${
-                          store.is_favorite
-                            ? "fill-[#d6a93f] text-[#d6a93f]"
-                            : "text-[#667085]"
-                        }`}
-                      />
-                      {store.is_favorite ? "Favourite" : "Mark favourite"}
-                    </button>
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                          />
 
-                    <button
-                      onClick={() => deleteStore(store.id, store.name)}
-                      className="inline-flex h-10 items-center gap-2 rounded-2xl border border-[#f0cfc5] bg-[#fff8f6] px-4 text-sm font-medium text-[#df6b47] transition hover:bg-[#fff1ed] sm:h-12 sm:px-5 sm:text-base"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))
-          )}
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              onClick={saveEdit}
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0b1020]"
+                            >
+                              <Save size={15} />
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white"
+                            >
+                              <X size={15} />
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 text-white/80">
+                              <Store size={18} />
+                            </div>
+                            <p className="truncate text-sm font-medium text-white">{store.name}</p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => startEdit(store)}
+                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-white/15"
+                            >
+                              <Pencil size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => deleteStore(store.id)}
+                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-red-500/20 hover:text-red-300"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </main>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-[24px] border border-[#d8dfeb] bg-white p-5 shadow-sm">
-      <p className="text-sm text-[#667085]">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-[#0d1730]">{value}</p>
-    </div>
   );
 }
