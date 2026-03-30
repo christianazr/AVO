@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   Check,
@@ -44,6 +45,11 @@ const categories = [
 ];
 
 export default function GroceryPage() {
+  const searchParams = useSearchParams();
+
+  const initialStoreParam = searchParams.get("store");
+  const initialStatusParam = searchParams.get("status");
+
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +70,20 @@ export default function GroceryPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (initialStoreParam) {
+      setSelectedStore(initialStoreParam);
+    }
+
+    if (
+      initialStatusParam === "pending" ||
+      initialStatusParam === "completed" ||
+      initialStatusParam === "all"
+    ) {
+      setSelectedStatus(initialStatusParam);
+    }
+  }, [initialStoreParam, initialStatusParam]);
 
   const fetchData = async () => {
     try {
@@ -196,9 +216,26 @@ export default function GroceryPage() {
     return stores.find((store) => store.id === storeIdValue)?.name || "Unknown store";
   };
 
+  const activeStoreLabel = useMemo(() => {
+    if (selectedStore === "all") return "All stores";
+    if (selectedStore === "no-store") return "No store";
+    return stores.find((store) => store.id === selectedStore)?.name || "Filtered store";
+  }, [selectedStore, stores]);
+
+  const activeStatusLabel = useMemo(() => {
+    if (selectedStatus === "pending") return "Pending";
+    if (selectedStatus === "completed") return "Completed";
+    return "All";
+  }, [selectedStatus]);
+
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchesStore = selectedStore === "all" ? true : item.store_id === selectedStore;
+      const matchesStore =
+        selectedStore === "all"
+          ? true
+          : selectedStore === "no-store"
+            ? !item.store_id
+            : item.store_id === selectedStore;
 
       const matchesStatus =
         selectedStatus === "all"
@@ -248,6 +285,16 @@ export default function GroceryPage() {
               <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
                 Completed:
                 <span className="ml-2 font-semibold text-white">{completedCount}</span>
+              </div>
+
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+                Store:
+                <span className="ml-2 font-semibold text-white">{activeStoreLabel}</span>
+              </div>
+
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+                Status:
+                <span className="ml-2 font-semibold text-white">{activeStatusLabel}</span>
               </div>
 
               <button
@@ -355,6 +402,9 @@ export default function GroceryPage() {
                   >
                     <option value="all" className="text-black">
                       All stores
+                    </option>
+                    <option value="no-store" className="text-black">
+                      No store
                     </option>
                     {stores.map((store) => (
                       <option key={store.id} value={store.id} className="text-black">
