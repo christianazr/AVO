@@ -76,7 +76,7 @@ export default function DashboardPage() {
   const recentItems = useMemo(() => items.slice(0, 5), [items]);
 
   return (
-    <main className="min-h-screen bg-[#0b1020] text-white">
+    <main className="min-h-screen text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-24 pt-6 sm:px-6 lg:px-8">
         <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.18),transparent_30%)]" />
@@ -120,21 +120,25 @@ export default function DashboardPage() {
             title="Total Items"
             value={loading ? "..." : String(stats.totalItems)}
             icon={<ClipboardList size={18} />}
+            href="/grocery"
           />
           <StatCard
             title="Pending"
             value={loading ? "..." : String(stats.pendingItems)}
             icon={<ShoppingCart size={18} />}
+            href="/grocery"
           />
           <StatCard
             title="Completed"
             value={loading ? "..." : String(stats.completedItems)}
             icon={<CheckCircle2 size={18} />}
+            href="/grocery"
           />
           <StatCard
             title="Stores"
             value={loading ? "..." : String(stats.totalStores)}
             icon={<Store size={18} />}
+            href="/stores"
           />
         </section>
 
@@ -226,21 +230,27 @@ function StatCard({
   title,
   value,
   icon,
+  href,
 }: {
   title: string;
   value: string;
   icon: React.ReactNode;
+  href: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 shadow-lg backdrop-blur-xl">
+    <Link
+      href={href}
+      className="group rounded-[24px] border border-white/10 bg-white/5 p-5 shadow-lg backdrop-blur-xl transition hover:scale-[1.02] hover:bg-white/10"
+    >
       <div className="flex items-center justify-between">
-        <div className="rounded-2xl border border-white/10 bg-white/10 p-3 text-white/80">
+        <div className="rounded-2xl border border-white/10 bg-white/10 p-3 text-white/80 transition group-hover:bg-white group-hover:text-[#0b1020]">
           {icon}
         </div>
       </div>
+
       <p className="mt-4 text-sm text-white/60">{title}</p>
       <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-    </div>
+    </Link>
   );
 }
 
