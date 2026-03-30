@@ -1,33 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  Pencil,
-  Plus,
-  RotateCw,
-  Save,
   Sparkles,
-  Store,
+  Plus,
   Trash2,
-  X,
-  BatteryLow,
-  Droplets,
+  Pencil,
+  CheckCircle2,
+  Circle,
+  Store as StoreIcon,
+  AlertCircle,
 } from "lucide-react";
 
-type StoreType = {
+type Store = {
   id: string;
+  user_id: string;
   name: string;
+  created_at?: string;
 };
 
 type AutoConsumptionRule = {
   id: string;
+  user_id: string;
   product_name: string;
-  category: string | null;
+  category: string;
   store_id: string | null;
-  current_stock: number | null;
-  threshold_percent: number | null;
-  last_triggered_at: string | null;
+  threshold_percent: number;
+  is_active: boolean;
   created_at?: string;
 };
 
@@ -42,539 +42,480 @@ const categories = [
   "Snacks",
   "Cleaning",
   "Household",
+  "Baby",
   "Other",
 ];
 
 export default function AutoConsumptionPage() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  const [stores, setStores] = useState<Store[]>([]);
   const [rules, setRules] = useState<AutoConsumptionRule[]>([]);
-  const [stores, setStores] = useState<StoreType[]>([]);
 
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("Other");
-  const [storeId, setStoreId] = useState("");
-  const [currentStock, setCurrentStock] = useState("100");
-  const [thresholdPercent, setThresholdPercent] = useState("25");
+  const [selectedStore, setSelectedStore] = useState("");
+  const [thresholdPercent, setThresholdPercent] = useState(25);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editProductName, setEditProductName] = useState("");
-  const [editCategory, setEditCategory] = useState("Other");
-  const [editStoreId, setEditStoreId] = useState("");
-  const [editCurrentStock, setEditCurrentStock] = useState("100");
-  const [editThresholdPercent, setEditThresholdPercent] = useState("25");
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
+  const storeMap = useMemo(() => {
+    return new Map(stores.map((store) => [store.id, store.name]));
+  }, [stores]);
 
-      const [{ data: rulesData, error: rulesError }, { data: storesData, error: storesError }] =
-        await Promise.all([
-          supabase
-            .from("auto_consumption_rules")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase.from("stores").select("*").order("name", { ascending: true }),
-        ]);
+  async function loadPageData() {
+    setLoadingPage(true);
+    setError("");
 
-      if (rulesError) throw rulesError;
-      if (storesError) throw storesError;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      setRules((rulesData as AutoConsumptionRule[]) || []);
-      setStores((storesData as StoreType[]) || []);
-    } catch (error) {
-      console.error("Error fetching auto consumption data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const clampPercent = (value: string) => {
-    const num = Number(value);
-    if (Number.isNaN(num)) return 0;
-    return Math.max(0, Math.min(100, num));
-  };
-
-  const addRule = async () => {
-    if (!productName.trim()) return;
-
-    try {
-      setSaving(true);
-
-      const payload = {
-        product_name: productName.trim(),
-        category,
-        store_id: storeId || null,
-        current_stock: clampPercent(currentStock),
-        threshold_percent: clampPercent(thresholdPercent),
-        last_triggered_at: null,
-      };
-
-      const { data, error } = await supabase
-        .from("auto_consumption_rules")
-        .insert([payload])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setRules((prev) => [data as AutoConsumptionRule, ...prev]);
-      setProductName("");
-      setCategory("Other");
-      setStoreId("");
-      setCurrentStock("100");
-      setThresholdPercent("25");
-    } catch (error) {
-      console.error("Error adding auto-consumption rule:", error);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteRule = async (id: string) => {
-    try {
-      const { error } = await supabase.from("auto_consumption_rules").delete().eq("id", id);
-      if (error) throw error;
-
-      setRules((prev) => prev.filter((rule) => rule.id !== id));
-    } catch (error) {
-      console.error("Error deleting rule:", error);
-    }
-  };
-
-  const startEdit = (rule: AutoConsumptionRule) => {
-    setEditingId(rule.id);
-    setEditProductName(rule.product_name);
-    setEditCategory(rule.category || "Other");
-    setEditStoreId(rule.store_id || "");
-    setEditCurrentStock(String(rule.current_stock ?? 100));
-    setEditThresholdPercent(String(rule.threshold_percent ?? 25));
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditProductName("");
-    setEditCategory("Other");
-    setEditStoreId("");
-    setEditCurrentStock("100");
-    setEditThresholdPercent("25");
-  };
-
-  const saveEdit = async () => {
-    if (!editingId || !editProductName.trim()) return;
-
-    try {
-      const updates = {
-        product_name: editProductName.trim(),
-        category: editCategory,
-        store_id: editStoreId || null,
-        current_stock: clampPercent(editCurrentStock),
-        threshold_percent: clampPercent(editThresholdPercent),
-      };
-
-      const { error } = await supabase
-        .from("auto_consumption_rules")
-        .update(updates)
-        .eq("id", editingId);
-
-      if (error) throw error;
-
-      setRules((prev) =>
-        prev.map((rule) =>
-          rule.id === editingId
-            ? {
-                ...rule,
-                product_name: editProductName.trim(),
-                category: editCategory,
-                store_id: editStoreId || null,
-                current_stock: clampPercent(editCurrentStock),
-                threshold_percent: clampPercent(editThresholdPercent),
-              }
-            : rule
-        )
-      );
-
-      cancelEdit();
-    } catch (error) {
-      console.error("Error updating rule:", error);
-    }
-  };
-
-  const updateCurrentStock = async (rule: AutoConsumptionRule, nextStock: number) => {
-    try {
-      const clampedStock = Math.max(0, Math.min(100, nextStock));
-
-      const { error } = await supabase
-        .from("auto_consumption_rules")
-        .update({ current_stock: clampedStock })
-        .eq("id", rule.id);
-
-      if (error) throw error;
-
-      setRules((prev) =>
-        prev.map((item) =>
-          item.id === rule.id ? { ...item, current_stock: clampedStock } : item
-        )
-      );
-    } catch (error) {
-      console.error("Error updating stock percentage:", error);
-    }
-  };
-
-  const generateIfBelowThreshold = async (rule: AutoConsumptionRule) => {
-    const current = rule.current_stock ?? 100;
-    const threshold = rule.threshold_percent ?? 25;
-
-    if (current > threshold) {
-      alert(`This item is still above the threshold (${current}% > ${threshold}%).`);
+    if (userError || !user) {
+      setError("Unable to load user session.");
+      setLoadingPage(false);
       return;
     }
 
-    try {
-      const insertPayload = {
-        name: rule.product_name,
-        category: rule.category || "Other",
-        store_id: rule.store_id || null,
-        completed: false,
-      };
+    setUserId(user.id);
 
-      const { error: insertError } = await supabase.from("grocery_items").insert([insertPayload]);
-      if (insertError) throw insertError;
+    const [storesRes, rulesRes] = await Promise.all([
+      supabase
+        .from("stores")
+        .select("id, user_id, name, created_at")
+        .eq("user_id", user.id)
+        .order("name", { ascending: true }),
 
-      const nowIso = new Date().toISOString();
-
-      const { error: updateError } = await supabase
+      supabase
         .from("auto_consumption_rules")
-        .update({ last_triggered_at: nowIso })
-        .eq("id", rule.id);
-
-      if (updateError) throw updateError;
-
-      setRules((prev) =>
-        prev.map((item) =>
-          item.id === rule.id ? { ...item, last_triggered_at: nowIso } : item
+        .select(
+          "id, user_id, product_name, category, store_id, threshold_percent, is_active, created_at"
         )
-      );
-    } catch (error) {
-      console.error("Error generating grocery item:", error);
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (storesRes.error) {
+      setError("Failed to load stores.");
+    } else {
+      setStores(storesRes.data || []);
     }
-  };
 
-  const getStoreName = (value: string | null) => {
-    if (!value) return "No store";
-    return stores.find((store) => store.id === value)?.name || "Unknown store";
-  };
+    if (rulesRes.error) {
+      setError((prev) => prev || "Failed to load auto-consumption rules.");
+    } else {
+      setRules(rulesRes.data || []);
+    }
 
-  const formatLastTriggered = (value: string | null) => {
-    if (!value) return "Never triggered";
-    return new Date(value).toLocaleDateString(undefined, {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+    setLoadingPage(false);
+  }
+
+  useEffect(() => {
+    loadPageData();
+  }, []);
+
+  function resetForm() {
+    setProductName("");
+    setCategory("Other");
+    setSelectedStore("");
+    setThresholdPercent(25);
+    setEditingRuleId(null);
+  }
+
+  async function handleSaveRule(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!userId) {
+      setError("No active user found.");
+      return;
+    }
+
+    if (!productName.trim()) {
+      setError("Please enter a product name.");
+      return;
+    }
+
+    if (thresholdPercent < 1 || thresholdPercent > 100) {
+      setError("Threshold must be between 1 and 100.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    const payload = {
+      user_id: userId,
+      product_name: productName.trim(),
+      category,
+      store_id: selectedStore || null,
+      threshold_percent: thresholdPercent,
+      is_active: true,
+    };
+
+    if (editingRuleId) {
+      const { error } = await supabase
+        .from("auto_consumption_rules")
+        .update(payload)
+        .eq("id", editingRuleId)
+        .eq("user_id", userId);
+
+      if (error) {
+        setError("Failed to update rule.");
+        setSaving(false);
+        return;
+      }
+
+      setSuccess("Rule updated successfully.");
+    } else {
+      const { error } = await supabase
+        .from("auto_consumption_rules")
+        .insert([payload]);
+
+      if (error) {
+        setError("Failed to create rule.");
+        setSaving(false);
+        return;
+      }
+
+      setSuccess("Rule created successfully.");
+    }
+
+    await loadPageData();
+    resetForm();
+    setSaving(false);
+  }
+
+  function handleEditRule(rule: AutoConsumptionRule) {
+    setEditingRuleId(rule.id);
+    setProductName(rule.product_name);
+    setCategory(rule.category || "Other");
+    setSelectedStore(rule.store_id || "");
+    setThresholdPercent(rule.threshold_percent || 25);
+    setError("");
+    setSuccess("");
+  }
+
+  async function handleDeleteRule(ruleId: string) {
+    if (!userId) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this auto-consumption rule?"
+    );
+    if (!confirmed) return;
+
+    setError("");
+    setSuccess("");
+
+    const { error } = await supabase
+      .from("auto_consumption_rules")
+      .delete()
+      .eq("id", ruleId)
+      .eq("user_id", userId);
+
+    if (error) {
+      setError("Failed to delete rule.");
+      return;
+    }
+
+    if (editingRuleId === ruleId) {
+      resetForm();
+    }
+
+    setRules((prev) => prev.filter((rule) => rule.id !== ruleId));
+    setSuccess("Rule deleted successfully.");
+  }
+
+  async function handleToggleRule(rule: AutoConsumptionRule) {
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("auto_consumption_rules")
+      .update({ is_active: !rule.is_active })
+      .eq("id", rule.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      setError("Failed to update rule status.");
+      return;
+    }
+
+    setRules((prev) =>
+      prev.map((item) =>
+        item.id === rule.id ? { ...item, is_active: !item.is_active } : item
+      )
+    );
+  }
 
   return (
-    <main className="min-h-screen text-white">
-      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
-        <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.18),transparent_30%)]" />
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80">
-              <Sparkles size={14} />
-              Auto Consumption
-            </div>
-
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Automate recurring grocery items
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
-              Create product rules using remaining stock percentage instead of days, and add items
-              to Grocery when they fall below your threshold.
-            </p>
+    <main className="min-h-screen bg-[#030b22] text-white">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-8 sm:px-6 lg:px-8">
+        <section className="rounded-[32px] border border-white/10 bg-gradient-to-r from-teal-900/40 via-slate-900/80 to-indigo-900/50 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:p-8">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90">
+            <Sparkles size={16} />
+            <span>Auto Consumption</span>
           </div>
+
+          <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl">
+            Automate recurring grocery items
+          </h1>
+
+          <p className="mt-4 max-w-3xl text-base text-white/70 sm:text-xl">
+            Create product rules using remaining stock percentage, and assign a
+            store so items can be linked correctly to your grocery planning.
+          </p>
         </section>
 
-        <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold">Add new rule</h2>
-              <p className="text-sm text-white/60">Trigger by stock percentage</p>
-            </div>
+        {error ? (
+          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-red-200">
+            <AlertCircle size={18} className="mt-0.5" />
+            <p>{error}</p>
+          </div>
+        ) : null}
 
-            <div className="space-y-4">
+        {success ? (
+          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-emerald-200">
+            <CheckCircle2 size={18} className="mt-0.5" />
+            <p>{success}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.6fr]">
+          <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_40px_rgba(0,0,0,0.25)] sm:p-6">
+            <h2 className="text-2xl font-semibold">
+              {editingRuleId ? "Edit rule" : "Add new rule"}
+            </h2>
+            <p className="mt-1 text-white/60">
+              Trigger by stock percentage
+            </p>
+
+            <form onSubmit={handleSaveRule} className="mt-6 space-y-5">
               <div>
-                <label className="mb-2 block text-sm text-white/70">Product name</label>
+                <label className="mb-2 block text-sm text-white/80">
+                  Product name
+                </label>
                 <input
+                  type="text"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                   placeholder="e.g. Milk"
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-4 text-white placeholder:text-white/35 outline-none transition focus:border-white/25"
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Category</label>
+                <label className="mb-2 block text-sm text-white/80">
+                  Category
+                </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-4 text-white outline-none transition focus:border-white/25"
                 >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat} className="text-black">
-                      {cat}
+                  {categories.map((item) => (
+                    <option key={item} value={item} className="text-black">
+                      {item}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Store</label>
+                <label className="mb-2 block text-sm text-white/80">
+                  Store
+                </label>
                 <select
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
+                  value={selectedStore}
+                  onChange={(e) => setSelectedStore(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-4 text-white outline-none transition focus:border-white/25"
                 >
                   <option value="" className="text-black">
                     No store
                   </option>
+
                   {stores.map((store) => (
-                    <option key={store.id} value={store.id} className="text-black">
+                    <option
+                      key={store.id}
+                      value={store.id}
+                      className="text-black"
+                    >
                       {store.name}
                     </option>
                   ))}
                 </select>
-                {stores.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-300">
-                    No stores found yet. Create one in Stores if you want to assign a shop here.
+
+                {stores.length === 0 ? (
+                  <p className="mt-3 text-sm text-yellow-300">
+                    No stores found yet. Create one in Stores if you want to
+                    assign a shop here.
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-white/50">
+                    Select one of your saved stores.
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Current stock (%)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={currentStock}
-                  onChange={(e) => setCurrentStock(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                />
+                <label className="mb-2 block text-sm text-white/80">
+                  Threshold percentage
+                </label>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={100}
+                    value={thresholdPercent}
+                    onChange={(e) =>
+                      setThresholdPercent(Number(e.target.value))
+                    }
+                    className="w-full"
+                  />
+                  <div className="min-w-[74px] rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-center font-medium">
+                    {thresholdPercent}%
+                  </div>
+                </div>
+
+                <p className="mt-3 text-sm text-white/50">
+                  Example: when stock falls below {thresholdPercent}%, this rule
+                  is ready to be used.
+                </p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-white/70">Trigger threshold (%)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={thresholdPercent}
-                  onChange={(e) => setThresholdPercent(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 font-semibold text-slate-900 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus size={18} />
+                  {saving
+                    ? "Saving..."
+                    : editingRuleId
+                    ? "Update rule"
+                    : "Add rule"}
+                </button>
+
+                {editingRuleId ? (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 font-medium text-white/85 transition hover:bg-white/10"
+                  >
+                    Cancel edit
+                  </button>
+                ) : null}
               </div>
+            </form>
+          </section>
 
-              <button
-                onClick={addRule}
-                disabled={saving}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#0b1020] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <Plus size={16} />
-                {saving ? "Saving..." : "Add rule"}
-              </button>
-            </div>
-          </div>
+          <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_40px_rgba(0,0,0,0.25)] sm:p-6">
+            <h2 className="text-2xl font-semibold">Your auto-consumption rules</h2>
+            <p className="mt-1 text-white/60">
+              Rules linked to your products, categories and stores
+            </p>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold">Your auto-consumption rules</h2>
-              <p className="text-sm text-white/60">
-                Items are ready to add when stock goes below threshold
-              </p>
-            </div>
-
-            {loading ? (
-              <p className="text-sm text-white/60">Loading rules...</p>
-            ) : rules.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
-                No auto-consumption rules yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {rules.map((rule) => {
-                  const isEditing = editingId === rule.id;
-                  const current = rule.current_stock ?? 100;
-                  const threshold = rule.threshold_percent ?? 25;
-                  const ready = current <= threshold;
-
-                  return (
+            <div className="mt-6">
+              {loadingPage ? (
+                <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-8 text-white/50">
+                  Loading rules...
+                </div>
+              ) : rules.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-8 text-white/50">
+                  No auto-consumption rules yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {rules.map((rule) => (
                     <div
                       key={rule.id}
-                      className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4"
+                      className="rounded-[26px] border border-white/10 bg-white/[0.04] p-4 transition hover:bg-white/[0.06]"
                     >
-                      {isEditing ? (
-                        <div className="space-y-3">
-                          <input
-                            value={editProductName}
-                            onChange={(e) => setEditProductName(e.target.value)}
-                            className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                          />
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleRule(rule)}
+                            className="mt-1 text-white/75 transition hover:text-white"
+                            aria-label={
+                              rule.is_active ? "Disable rule" : "Enable rule"
+                            }
+                          >
+                            {rule.is_active ? (
+                              <CheckCircle2 size={22} />
+                            ) : (
+                              <Circle size={22} />
+                            )}
+                          </button>
 
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <select
-                              value={editCategory}
-                              onChange={(e) => setEditCategory(e.target.value)}
-                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                            >
-                              {categories.map((cat) => (
-                                <option key={cat} value={cat} className="text-black">
-                                  {cat}
-                                </option>
-                              ))}
-                            </select>
-
-                            <select
-                              value={editStoreId}
-                              onChange={(e) => setEditStoreId(e.target.value)}
-                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                            >
-                              <option value="" className="text-black">
-                                No store
-                              </option>
-                              {stores.map((store) => (
-                                <option key={store.id} value={store.id} className="text-black">
-                                  {store.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={editCurrentStock}
-                              onChange={(e) => setEditCurrentStock(e.target.value)}
-                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={editThresholdPercent}
-                              onChange={(e) => setEditThresholdPercent(e.target.value)}
-                              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none"
-                            />
-                          </div>
-
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <button
-                              onClick={saveEdit}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0b1020]"
-                            >
-                              <Save size={15} />
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white"
-                            >
-                              <X size={15} />
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-white">
+                          <div>
+                            <h3 className="text-lg font-semibold">
                               {rule.product_name}
-                            </p>
+                            </h3>
 
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                              <span className="rounded-full bg-white/10 px-3 py-1 text-white/70">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/65">
+                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                                 {rule.category || "Other"}
                               </span>
 
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white/70">
-                                <Store size={12} />
-                                {getStoreName(rule.store_id)}
+                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                                Below {rule.threshold_percent}%
                               </span>
 
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white/70">
-                                <Droplets size={12} />
-                                Stock {current}%
+                              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                                <StoreIcon size={14} />
+                                {rule.store_id
+                                  ? storeMap.get(rule.store_id) || "Unknown store"
+                                  : "No store"}
                               </span>
 
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white/70">
-                                <BatteryLow size={12} />
-                                Trigger at {threshold}%
+                              <span
+                                className={`rounded-full px-3 py-1 ${
+                                  rule.is_active
+                                    ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                                    : "border border-white/10 bg-white/5 text-white/55"
+                                }`}
+                              >
+                                {rule.is_active ? "Active" : "Paused"}
                               </span>
                             </div>
-
-                            <p className="mt-3 text-xs text-white/45">
-                              Last triggered: {formatLastTriggered(rule.last_triggered_at)}
-                            </p>
-
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                onClick={() => updateCurrentStock(rule, current - 10)}
-                                className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/15"
-                              >
-                                -10%
-                              </button>
-                              <button
-                                onClick={() => updateCurrentStock(rule, current + 10)}
-                                className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/15"
-                              >
-                                +10%
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={() => generateIfBelowThreshold(rule)}
-                              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-                                ready
-                                  ? "bg-white text-[#0b1020] hover:scale-[1.01]"
-                                  : "border border-white/10 bg-white/10 text-white/60"
-                              }`}
-                            >
-                              <RotateCw size={15} />
-                              {ready ? "Add to grocery" : "Above threshold"}
-                            </button>
-
-                            <button
-                              onClick={() => startEdit(rule)}
-                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-white/15"
-                            >
-                              <Pencil size={16} />
-                            </button>
-
-                            <button
-                              onClick={() => deleteRule(rule.id)}
-                              className="rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white/80 transition hover:bg-red-500/20 hover:text-red-300"
-                            >
-                              <Trash2 size={16} />
-                            </button>
                           </div>
                         </div>
-                      )}
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleEditRule(rule)}
+                            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 transition hover:bg-white/10 hover:text-white"
+                            aria-label="Edit rule"
+                          >
+                            <Pencil size={18} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 transition hover:bg-red-500/15 hover:text-red-200"
+                            aria-label="Delete rule"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );
