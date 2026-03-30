@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  ShoppingCart,
-  Store,
-  Sparkles,
-  ChevronRight,
-  CheckCircle2,
-  ClipboardList,
   ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  ShoppingCart,
+  Sparkles,
+  Store,
 } from "lucide-react";
 
 type GroceryItem = {
@@ -26,6 +26,14 @@ type StoreType = {
   id: string;
   name: string;
   created_at?: string;
+};
+
+type StoreSummary = {
+  id: string;
+  name: string;
+  total: number;
+  pending: number;
+  completed: number;
 };
 
 export default function DashboardPage() {
@@ -50,8 +58,8 @@ export default function DashboardPage() {
       if (storesError) throw storesError;
       if (itemsError) throw itemsError;
 
-      setStores(storesData || []);
-      setItems(itemsData || []);
+      setStores((storesData as StoreType[]) || []);
+      setItems((itemsData as GroceryItem[]) || []);
     } catch (error) {
       console.error("Error loading dashboard:", error);
     } finally {
@@ -75,6 +83,37 @@ export default function DashboardPage() {
 
   const recentItems = useMemo(() => items.slice(0, 5), [items]);
 
+  const pendingItemsPreview = useMemo(
+    () => items.filter((item) => !item.completed).slice(0, 6),
+    [items]
+  );
+
+  const storeSummaries = useMemo<StoreSummary[]>(() => {
+    const summaries: StoreSummary[] = stores.map((store) => {
+      const storeItems = items.filter((item) => item.store_id === store.id);
+      return {
+        id: store.id,
+        name: store.name,
+        total: storeItems.length,
+        pending: storeItems.filter((item) => !item.completed).length,
+        completed: storeItems.filter((item) => item.completed).length,
+      };
+    });
+
+    const noStoreItems = items.filter((item) => !item.store_id);
+    if (noStoreItems.length > 0) {
+      summaries.push({
+        id: "no-store",
+        name: "No store",
+        total: noStoreItems.length,
+        pending: noStoreItems.filter((item) => !item.completed).length,
+        completed: noStoreItems.filter((item) => item.completed).length,
+      });
+    }
+
+    return summaries.sort((a, b) => b.pending - a.pending || b.total - a.total);
+  }, [stores, items]);
+
   return (
     <main className="min-h-screen text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-24 pt-6 sm:px-6 lg:px-8">
@@ -91,8 +130,8 @@ export default function DashboardPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
-              Manage your shopping list, organise stores, and keep everything aligned with a
-              cleaner premium experience.
+              Manage your grocery flow, review pending shopping items, and keep stores organised in
+              one cleaner premium dashboard.
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -105,10 +144,10 @@ export default function DashboardPage() {
               </Link>
 
               <Link
-                href="/stores"
+                href="/auto-consumption"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
               >
-                Manage Stores
+                Open Auto Consumption
                 <ChevronRight size={16} />
               </Link>
             </div>
@@ -142,7 +181,49 @@ export default function DashboardPage() {
           />
         </section>
 
-        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Pending items</h2>
+                <p className="text-sm text-white/60">Quick access to what still needs buying</p>
+              </div>
+
+              <Link
+                href="/grocery"
+                className="text-sm font-medium text-white/80 transition hover:text-white"
+              >
+                View all
+              </Link>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-white/60">Loading items...</p>
+            ) : pendingItemsPreview.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
+                No pending items right now.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingItemsPreview.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                      <p className="mt-1 text-xs text-white/50">{item.category || "Other"}</p>
+                    </div>
+
+                    <span className="ml-3 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300">
+                      Pending
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -187,6 +268,66 @@ export default function DashboardPage() {
                     >
                       {item.completed ? "Completed" : "Pending"}
                     </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Store summary</h2>
+                <p className="text-sm text-white/60">See where most pending items are grouped</p>
+              </div>
+
+              <Link
+                href="/stores"
+                className="text-sm font-medium text-white/80 transition hover:text-white"
+              >
+                Manage stores
+              </Link>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-white/60">Loading store summary...</p>
+            ) : storeSummaries.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
+                No store data available yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {storeSummaries.map((store) => (
+                  <div
+                    key={store.id}
+                    className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{store.name}</p>
+                        <p className="mt-1 text-xs text-white/50">
+                          {store.total} total item{store.total === 1 ? "" : "s"}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/75">
+                        {store.pending} pending
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                      <div className="rounded-xl bg-white/10 px-3 py-2 text-white/70">
+                        Total: <span className="font-semibold text-white">{store.total}</span>
+                      </div>
+                      <div className="rounded-xl bg-white/10 px-3 py-2 text-white/70">
+                        Pending: <span className="font-semibold text-white">{store.pending}</span>
+                      </div>
+                      <div className="rounded-xl bg-white/10 px-3 py-2 text-white/70">
+                        Done: <span className="font-semibold text-white">{store.completed}</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
