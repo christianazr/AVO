@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
+  LayoutDashboard,
+  ShieldCheck,
   ShoppingBag,
   Store,
   Sparkles,
@@ -9,54 +13,62 @@ import {
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#eef3fb] text-[#0d1730]">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-8 lg:px-10">
-        <header className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
+    <main className="min-h-screen bg-[#eef3fb] text-[#0d1b4c]">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-10">
+        {/* Top bar */}
+        <header className="flex items-center justify-between py-2">
           <div>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#2f66f5] sm:mb-4 sm:text-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#2f5bff] sm:text-xs">
               Smart Grocery Planner
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl">
-              AVO Grocery List
-            </h1>
+            </p>
           </div>
 
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
+          <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="rounded-xl border border-[#d8dfeb] bg-white px-4 py-2.5 text-center text-sm font-semibold text-[#0d1730] shadow-sm transition hover:bg-[#f8fbff] sm:rounded-2xl sm:px-6 sm:py-3 sm:text-base"
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0d1b4c] shadow-[0_6px_20px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(15,23,42,0.10)] sm:px-7 sm:text-base"
             >
               Log in
             </Link>
+
             <Link
-              href="/login"
-              className="rounded-xl bg-[#0c1730] px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-base"
+              href="/register"
+              className="rounded-2xl bg-[#07194a] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(7,25,74,0.25)] transition hover:-translate-y-0.5 hover:bg-[#0b2366] sm:px-7 sm:text-base"
             >
               Get started
             </Link>
           </div>
         </header>
 
-        <section className="grid gap-6 xl:grid-cols-[1.55fr_1fr] xl:gap-8">
-          <div className="rounded-[28px] border border-[#d8dfeb] bg-white p-5 shadow-sm sm:p-8 md:p-10 sm:rounded-[34px]">
-            <div className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#2f66f5] sm:mb-5 sm:text-sm">
-              Premium grocery dashboard
-            </div>
+        {/* Hero title */}
+        <section className="pt-8 sm:pt-10">
+          <h1 className="text-4xl font-semibold tracking-tight text-[#0b1742] sm:text-5xl lg:text-6xl">
+            AVO Grocery List
+          </h1>
+        </section>
 
-            <h2 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-[#0d1730] sm:text-4xl md:text-5xl xl:text-6xl">
+        {/* Main content */}
+        <section className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+          {/* Left card */}
+          <div className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8 lg:p-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#2f5bff] sm:text-xs">
+              Premium Grocery Dashboard
+            </p>
+
+            <h2 className="mt-5 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-[#0b1742] sm:text-5xl lg:text-[72px]">
               Shop smarter with clarity, structure and style.
             </h2>
 
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#667085] sm:mt-6 sm:text-lg md:text-xl md:leading-8">
-              AVO helps you organise your grocery shopping by category, store and
-              priority in one elegant experience inspired by premium productivity
-              tools.
+            <p className="mt-8 max-w-3xl text-lg leading-8 text-slate-500 sm:text-xl">
+              AVO helps you organise your grocery shopping by category, store
+              and priority in one elegant experience inspired by premium
+              productivity tools.
             </p>
 
-            <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-4">
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
               <Link
                 href="/login"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0c1730] px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:opacity-95 sm:w-auto sm:px-7 sm:py-4 sm:text-lg"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#07194a] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_32px_rgba(7,25,74,0.25)] transition hover:-translate-y-0.5 hover:bg-[#0b2366]"
               >
                 Open AVO
                 <ArrowRight className="h-5 w-5" />
@@ -64,86 +76,119 @@ export default function HomePage() {
 
               <Link
                 href="/dashboard"
-                className="w-full rounded-2xl border border-[#d8dfeb] bg-white px-5 py-3.5 text-center text-base font-semibold text-[#0d1730] transition hover:bg-[#f8fbff] sm:w-auto sm:px-7 sm:py-4 sm:text-lg"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-[#f8fbff] px-6 py-4 text-base font-semibold text-[#0d1b4c] transition hover:-translate-y-0.5 hover:bg-white"
               >
                 View dashboard
               </Link>
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-3 md:mt-10">
-              <FeatureCard
-                icon={<ShoppingBag className="h-5 w-5" />}
-                title="Smart lists"
-                text="Track essentials and keep your shopping beautifully organised."
-              />
-              <FeatureCard
-                icon={<Store className="h-5 w-5" />}
-                title="Store filters"
-                text="Split your list by Tesco, Lidl, Costco and more."
-              />
-              <FeatureCard
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                title="Progress view"
-                text="Monitor completed and pending items instantly."
-              />
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-[#d8dfeb] bg-white p-5 shadow-sm sm:p-6 sm:rounded-[34px]">
-            <div className="min-h-full rounded-[24px] bg-gradient-to-br from-[#081225] via-[#0d1a34] to-[#1d2d47] p-5 text-white sm:rounded-[28px] sm:p-7">
-              <h3 className="mb-6 text-2xl font-semibold tracking-tight sm:mb-8 sm:text-3xl lg:text-4xl">
-                Why AVO
-              </h3>
-
-              <div className="space-y-4">
-                <OverviewRow label="Premium and elegant interface" />
-                <OverviewRow label="Synced with Supabase" />
-                <OverviewRow label="Personal list for each user" />
-                <OverviewRow label="Fast filtering by store and category" />
+            {/* Bottom feature tiles */}
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-3xl border border-slate-200 bg-[#f8fbff] p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <Store className="h-5 w-5 text-[#2f5bff]" />
+                </div>
+                <h3 className="text-base font-semibold text-[#0b1742]">
+                  Store-based planning
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Keep each item linked to the right supermarket.
+                </p>
               </div>
 
-              <div className="mt-8 rounded-[24px] border border-white/10 bg-white/5 p-5 sm:mt-10">
-                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-white/60 sm:text-sm">
-                  <Sparkles className="h-4 w-4" />
-                  Premium tip
+              <div className="rounded-3xl border border-slate-200 bg-[#f8fbff] p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <ShoppingBag className="h-5 w-5 text-[#2f5bff]" />
                 </div>
-                <p className="text-sm leading-7 text-white/85 sm:text-base">
-                  Use favourites for repeat purchases and keep your weekly shopping
-                  routine much faster.
+                <h3 className="text-base font-semibold text-[#0b1742]">
+                  Clean grocery flows
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Add, edit and manage items in a more intuitive way.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-[#f8fbff] p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <LayoutDashboard className="h-5 w-5 text-[#2f5bff]" />
+                </div>
+                <h3 className="text-base font-semibold text-[#0b1742]">
+                  Elegant dashboard
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Premium layout designed for desktop and mobile.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-[#f8fbff] p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <ShieldCheck className="h-5 w-5 text-[#2f5bff]" />
+                </div>
+                <h3 className="text-base font-semibold text-[#0b1742]">
+                  Personal workspace
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Synced with your account and isolated per user.
                 </p>
               </div>
             </div>
           </div>
+
+          {/* Right card */}
+          <aside className="rounded-[34px] border border-slate-200 bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-5">
+            <div className="h-full rounded-[28px] bg-[radial-gradient(circle_at_top,_#0b245f_0%,_#07194a_45%,_#04102f_100%)] p-6 text-white sm:p-7">
+              <h3 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                Why AVO
+              </h3>
+
+              <div className="mt-7 space-y-4">
+                {[
+                  "Premium and elegant interface",
+                  "Synced with Supabase",
+                  "Personal list for each user",
+                  "Fast filtering by store and category",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-[24px] bg-white/12 px-5 py-5 backdrop-blur-sm"
+                  >
+                    <p className="text-xl leading-8 text-white sm:text-[21px]">
+                      {item}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-[26px] border border-white/10 bg-white/8 p-5">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/75">
+                  <Sparkles className="h-4 w-4" />
+                  Premium Tip
+                </div>
+
+                <p className="mt-3 text-base leading-7 text-white/85">
+                  AVO is built to feel calm, refined and efficient, so your
+                  grocery routine feels less cluttered and more intentional.
+                </p>
+
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-center gap-3 text-sm text-white/85">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Category organisation
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/85">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Store management
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/85">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Mobile-friendly layout
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
         </section>
       </div>
     </main>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  text,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-[#dde3ee] bg-[#f8fbff] p-5">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#e9f0ff] text-[#2f66f5]">
-        {icon}
-      </div>
-      <h3 className="text-lg font-semibold text-[#0d1730]">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-[#667085]">{text}</p>
-    </div>
-  );
-}
-
-function OverviewRow({ label }: { label: string }) {
-  return (
-    <div className="rounded-2xl bg-white/10 px-4 py-3 text-base font-medium text-white/95 sm:px-5 sm:py-4 sm:text-lg lg:text-2xl">
-      {label}
-    </div>
   );
 }
